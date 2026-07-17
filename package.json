@@ -1,0 +1,24 @@
+{
+  "name": "aliyacargo",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "nuxt build",
+    "dev": "nuxt dev",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare",
+    "bot": "node --env-file=.env --import tsx bot/index.ts"
+  },
+  "dependencies": {
+    "@grammyjs/validator": "^1.0.1",
+    "@supabase/supabase-js": "^2.110.2",
+    "grammy": "^1.44.0",
+    "nuxt": "^4.4.8",
+    "vue": "^3.5.39",
+    "vue-router": "^5.1.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.23.0"
+  }
+}
