@@ -167,61 +167,6 @@ async function copyExport() {
   }
 }
 
-async function downloadExport() {
-  exporting.value = true
-  try {
-    const text = await getExportText()
-    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `aliya-cargo-${dateFrom.value || 'all'}-${dateTo.value || 'all'}.txt`
-    link.click()
-    URL.revokeObjectURL(url)
-  }
-  catch (e) {
-    showToast('error', e instanceof Error ? e.message : 'Не удалось скачать файл')
-  }
-  finally {
-    exporting.value = false
-  }
-}
-
-async function printExport() {
-  exporting.value = true
-  try {
-    const text = await getExportText()
-    const iframe = document.createElement('iframe')
-    iframe.style.position = 'fixed'
-    iframe.style.width = '0'
-    iframe.style.height = '0'
-    iframe.style.border = '0'
-    document.body.appendChild(iframe)
-
-    const printDocument = iframe.contentDocument
-    if (!printDocument) throw new Error('Не удалось открыть печать')
-
-    const escapedText = text
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-
-    printDocument.open()
-    printDocument.write(`<!doctype html><html lang="ru"><head><title>Aliya Cargo</title><style>body{font:16px/1.6 sans-serif;padding:24px;white-space:pre-wrap}h1{font-size:20px;margin:0 0 16px}</style></head><body><h1>Aliya Cargo</h1>${escapedText}</body></html>`)
-    printDocument.close()
-
-    iframe.contentWindow?.focus()
-    iframe.contentWindow?.print()
-    setTimeout(() => iframe.remove(), 1000)
-  }
-  catch (e) {
-    showToast('error', e instanceof Error ? e.message : 'Не удалось открыть печать')
-  }
-  finally {
-    exporting.value = false
-  }
-}
-
 function onCodeInput(e: Event) {
   const input = e.target as HTMLInputElement
   code.value = input.value.replace(/\D/g, '').slice(0, 4)
@@ -448,17 +393,9 @@ function onWeightEnter() {
 
           <div class="export-block">
             <span class="export-title">Экспорт за выбранный период</span>
-            <div class="export-actions">
-              <button class="export-btn primary" :disabled="exporting" @click="copyExport">
-                Копировать
-              </button>
-              <button class="export-btn" :disabled="exporting" @click="downloadExport">
-                Скачать TXT
-              </button>
-              <button class="export-btn" :disabled="exporting" @click="printExport">
-                Печать
-              </button>
-            </div>
+            <button class="export-btn" :disabled="exporting" @click="copyExport">
+              {{ exporting ? 'Копирование…' : 'Копировать список' }}
+            </button>
           </div>
 
           <button v-if="filtersActive" class="clear-btn" @click="clearFilters">
@@ -719,25 +656,14 @@ function onWeightEnter() {
   color: var(--tg-theme-hint-color, #888);
 }
 
-.export-actions {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-}
-
 .export-btn {
-  min-width: 0;
-  padding: 10px 6px;
-  border-radius: 10px;
-  background: var(--tg-theme-bg-color, #f0f0f0);
-  color: var(--tg-theme-text-color, #222);
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.export-btn.primary {
+  width: 100%;
+  padding: 12px;
+  border-radius: 12px;
   background: var(--tg-theme-button-color, #3390ec);
   color: var(--tg-theme-button-text-color, #fff);
+  font-size: 14px;
+  font-weight: 700;
 }
 
 .export-btn:disabled {

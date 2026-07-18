@@ -6,6 +6,19 @@ interface DayBucket {
   revenue: number
 }
 
+interface PeriodStats {
+  count: number
+  weight: number
+  revenue: number
+}
+
+interface TopCustomer {
+  name: string
+  count: number
+  weight: number
+  revenue: number
+}
+
 interface StatsResponse {
   totalCount: number
   totalWeight: number
@@ -14,6 +27,19 @@ interface StatsResponse {
   unpaidCount: number
   paidRevenue: number
   unpaidRevenue: number
+  paidWeight: number
+  unpaidWeight: number
+  avgWeight: number
+  avgPrice: number
+  avgPricePerKg: number
+  paidRate: number
+  maxWeight: number
+  minWeight: number
+  today: PeriodStats
+  yesterday: PeriodStats
+  week: PeriodStats
+  month: PeriodStats
+  topCustomers: TopCustomer[]
   daily: DayBucket[]
 }
 
@@ -53,6 +79,10 @@ function formatWeight(n: number) {
   return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 }).format(n) + ' кг'
 }
 
+function formatNumber(n: number, digits = 1) {
+  return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: digits }).format(n)
+}
+
 function formatDay(dateStr: string) {
   const d = new Date(`${dateStr}T00:00:00`)
   return d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })
@@ -61,6 +91,10 @@ function formatDay(dateStr: string) {
 function barHeight(revenue: number) {
   const pct = Math.max(4, Math.round((revenue / maxDailyRevenue.value) * 100))
   return `${pct}%`
+}
+
+function periodLabel(period: PeriodStats) {
+  return `${period.count} · ${formatWeight(period.weight)} · ${formatPrice(period.revenue)}`
 }
 </script>
 
@@ -104,21 +138,69 @@ function barHeight(revenue: number) {
           </div>
         </section>
 
+        <section class="card">
+          <h2 class="section-title">Периоды</h2>
+          <div class="period-list">
+            <div class="period-row">
+              <span class="period-name">Сегодня</span>
+              <span class="period-value">{{ periodLabel(stats.today) }}</span>
+            </div>
+            <div class="period-row">
+              <span class="period-name">Вчера</span>
+              <span class="period-value">{{ periodLabel(stats.yesterday) }}</span>
+            </div>
+            <div class="period-row">
+              <span class="period-name">Эта неделя</span>
+              <span class="period-value">{{ periodLabel(stats.week) }}</span>
+            </div>
+            <div class="period-row">
+              <span class="period-name">Этот месяц</span>
+              <span class="period-value">{{ periodLabel(stats.month) }}</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="card">
+          <h2 class="section-title">Средние показатели</h2>
+          <div class="metrics-grid">
+            <div class="metric">
+              <span class="metric-label">Средний вес</span>
+              <span class="metric-value">{{ formatWeight(stats.avgWeight) }}</span>
+            </div>
+            <div class="metric">
+              <span class="metric-label">Средняя цена</span>
+              <span class="metric-value">{{ formatPrice(stats.avgPrice) }}</span>
+            </div>
+            <div class="metric">
+              <span class="metric-label">Цена за кг</span>
+              <span class="metric-value">{{ formatPrice(stats.avgPricePerKg) }}</span>
+            </div>
+            <div class="metric">
+              <span class="metric-label">Мин / макс вес</span>
+              <span class="metric-value">{{ formatNumber(stats.minWeight) }}–{{ formatNumber(stats.maxWeight) }} кг</span>
+            </div>
+          </div>
+        </section>
+
         <section class="card breakdown-card">
-          <h2 class="section-title">Оплата</h2>
+          <h2 class="section-title">Оплата · {{ formatNumber(stats.paidRate, 0) }}%</h2>
           <div class="breakdown-row">
             <div class="breakdown-item paid">
               <span class="breakdown-dot" />
               <div class="breakdown-text">
                 <span class="breakdown-title">Оплачено</span>
-                <span class="breakdown-sub">{{ stats.paidCount }} записей · {{ formatPrice(stats.paidRevenue) }}</span>
+                <span class="breakdown-sub">
+                  {{ stats.paidCount }} записей · {{ formatWeight(stats.paidWeight) }} · {{ formatPrice(stats.paidRevenue) }}
+                </span>
               </div>
             </div>
             <div class="breakdown-item unpaid">
               <span class="breakdown-dot" />
               <div class="breakdown-text">
                 <span class="breakdown-title">Не оплачено</span>
-                <span class="breakdown-sub">{{ stats.unpaidCount }} записей · {{ formatPrice(stats.unpaidRevenue) }}</span>
+                <span class="breakdown-sub">
+                  {{ stats.unpaidCount }} записей · {{ formatWeight(stats.unpaidWeight) }} · {{ formatPrice(stats.unpaidRevenue) }}
+                </span>
               </div>
             </div>
           </div>
@@ -145,6 +227,30 @@ function barHeight(revenue: number) {
               <span class="chart-label">{{ formatDay(day.date) }}</span>
             </div>
           </div>
+          <div class="daily-summary">
+            <div v-for="day in stats.daily.filter(d => d.count > 0)" :key="`sum-${day.date}`" class="daily-row">
+              <span>{{ formatDay(day.date) }}</span>
+              <span>{{ day.count }} шт · {{ formatWeight(day.weight) }} · {{ formatPrice(day.revenue) }}</span>
+            </div>
+            <p v-if="!stats.daily.some(d => d.count > 0)" class="muted empty-daily">
+              За последние 14 дней записей нет
+            </p>
+          </div>
+        </section>
+
+        <section class="card">
+          <h2 class="section-title">Топ клиентов</h2>
+          <div v-if="stats.topCustomers.length" class="top-list">
+            <div v-for="(customer, index) in stats.topCustomers" :key="customer.name" class="top-row">
+              <span class="top-rank">{{ index + 1 }}</span>
+              <div class="top-info">
+                <span class="top-name">{{ customer.name }}</span>
+                <span class="top-meta">{{ customer.count }} записей · {{ formatWeight(customer.weight) }}</span>
+              </div>
+              <span class="top-revenue">{{ formatPrice(customer.revenue) }}</span>
+            </div>
+          </div>
+          <p v-else class="muted empty-daily">Пока нет данных по клиентам</p>
         </section>
       </main>
     </template>
@@ -269,6 +375,71 @@ function barHeight(revenue: number) {
   margin-bottom: 14px;
 }
 
+.period-list,
+.top-list,
+.daily-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.period-row,
+.daily-row,
+.top-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.period-row,
+.daily-row {
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.period-name,
+.daily-row span:first-child {
+  font-size: 14px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.period-value,
+.daily-row span:last-child {
+  font-size: 12px;
+  color: var(--tg-theme-hint-color, #666);
+  text-align: right;
+}
+
+.metrics-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.metric {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--tg-theme-bg-color, #f0f0f0);
+}
+
+.metric-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--tg-theme-hint-color, #888);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.metric-value {
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
 .breakdown-row {
   display: flex;
   flex-direction: column;
@@ -331,6 +502,7 @@ function barHeight(revenue: number) {
   align-items: flex-end;
   gap: 4px;
   height: 140px;
+  margin-bottom: 14px;
 }
 
 .chart-col {
@@ -364,6 +536,51 @@ function barHeight(revenue: number) {
   font-size: 9px;
   color: var(--tg-theme-hint-color, #888);
   white-space: nowrap;
+}
+
+.top-rank {
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  background: var(--tg-theme-bg-color, #f0f0f0);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.top-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.top-name {
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.top-meta {
+  font-size: 12px;
+  color: var(--tg-theme-hint-color, #888);
+}
+
+.top-revenue {
+  font-size: 13px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.empty-daily {
+  text-align: center;
+  padding: 4px 0;
 }
 
 .muted {
