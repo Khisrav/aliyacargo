@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { formatPhone } from '../../shared/utils/phone'
+
 interface DayBucket {
   date: string
   count: number
@@ -14,15 +16,20 @@ interface PeriodStats {
 
 interface TopCustomer {
   name: string
+  phone: string
   count: number
   weight: number
   revenue: number
+  unpaidCount: number
+  unpaidRevenue: number
 }
 
 interface StatsResponse {
   totalCount: number
   totalWeight: number
   totalRevenue: number
+  customersCount: number
+  customersWithDebt: number
   paidCount: number
   unpaidCount: number
   paidRevenue: number
@@ -40,6 +47,7 @@ interface StatsResponse {
   week: PeriodStats
   month: PeriodStats
   topCustomers: TopCustomer[]
+  leftovers: TopCustomer[]
   daily: DayBucket[]
 }
 
@@ -125,17 +133,51 @@ function periodLabel(period: PeriodStats) {
       <main class="main">
         <section class="cards-grid">
           <div class="stat-card">
-            <span class="stat-label">Всего записей</span>
+            <span class="stat-label">Записей</span>
             <span class="stat-value">{{ stats.totalCount }}</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Клиентов</span>
+            <span class="stat-value">{{ stats.customersCount }}</span>
           </div>
           <div class="stat-card">
             <span class="stat-label">Общий вес</span>
             <span class="stat-value">{{ formatWeight(stats.totalWeight) }}</span>
           </div>
-          <div class="stat-card wide accent">
+          <div class="stat-card accent">
             <span class="stat-label">Общая сумма</span>
             <span class="stat-value">{{ formatPrice(stats.totalRevenue) }}</span>
           </div>
+        </section>
+
+        <section class="card leftovers-card">
+          <h2 class="section-title">Остатки / долги</h2>
+          <div class="leftover-summary">
+            <div class="leftover-box">
+              <span class="metric-label">Неоплачено</span>
+              <span class="metric-value danger">{{ formatPrice(stats.unpaidRevenue) }}</span>
+              <span class="muted">{{ stats.unpaidCount }} записей · {{ formatWeight(stats.unpaidWeight) }}</span>
+            </div>
+            <div class="leftover-box">
+              <span class="metric-label">Должников</span>
+              <span class="metric-value danger">{{ stats.customersWithDebt }}</span>
+              <span class="muted">клиентов с остатком</span>
+            </div>
+          </div>
+
+          <div v-if="stats.leftovers.length" class="top-list">
+            <div v-for="(customer, index) in stats.leftovers" :key="`debt-${customer.phone}`" class="top-row">
+              <span class="top-rank">{{ index + 1 }}</span>
+              <div class="top-info">
+                <span class="top-name">{{ customer.name }}</span>
+                <span class="top-meta">
+                  {{ formatPhone(customer.phone) }} · {{ customer.unpaidCount }} записей · {{ formatWeight(customer.weight) }}
+                </span>
+              </div>
+              <span class="top-revenue danger">{{ formatPrice(customer.unpaidRevenue) }}</span>
+            </div>
+          </div>
+          <p v-else class="muted empty-daily">Неоплаченных остатков нет</p>
         </section>
 
         <section class="card">
@@ -241,11 +283,13 @@ function periodLabel(period: PeriodStats) {
         <section class="card">
           <h2 class="section-title">Топ клиентов</h2>
           <div v-if="stats.topCustomers.length" class="top-list">
-            <div v-for="(customer, index) in stats.topCustomers" :key="customer.name" class="top-row">
+            <div v-for="(customer, index) in stats.topCustomers" :key="customer.phone" class="top-row">
               <span class="top-rank">{{ index + 1 }}</span>
               <div class="top-info">
                 <span class="top-name">{{ customer.name }}</span>
-                <span class="top-meta">{{ customer.count }} записей · {{ formatWeight(customer.weight) }}</span>
+                <span class="top-meta">
+                  {{ formatPhone(customer.phone) }} · {{ customer.count }} записей · {{ formatWeight(customer.weight) }}
+                </span>
               </div>
               <span class="top-revenue">{{ formatPrice(customer.revenue) }}</span>
             </div>
@@ -336,10 +380,6 @@ function periodLabel(period: PeriodStats) {
   gap: 6px;
 }
 
-.stat-card.wide {
-  grid-column: 1 / -1;
-}
-
 .stat-card.accent {
   background: var(--tg-theme-button-color, #3390ec);
 }
@@ -358,7 +398,7 @@ function periodLabel(period: PeriodStats) {
 }
 
 .stat-value {
-  font-size: 24px;
+  font-size: 22px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
@@ -373,6 +413,22 @@ function periodLabel(period: PeriodStats) {
   font-size: 15px;
   font-weight: 600;
   margin-bottom: 14px;
+}
+
+.leftover-summary {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.leftover-box {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  border-radius: 12px;
+  background: #fef2f2;
 }
 
 .period-list,
@@ -438,6 +494,11 @@ function periodLabel(period: PeriodStats) {
   font-size: 15px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
+}
+
+.metric-value.danger,
+.top-revenue.danger {
+  color: #dc2626;
 }
 
 .breakdown-row {

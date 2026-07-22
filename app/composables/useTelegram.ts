@@ -1,10 +1,13 @@
 export interface CustomerGood {
   id: number
+  customer_id: number
   name: string
-  code: number
+  phone: string
   weight: number
   price: number
   has_paid: boolean
+  initiator: string | null
+  created_by: string | null
   created_at: string
 }
 

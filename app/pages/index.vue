@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { CustomerGood } from '~/composables/useTelegram'
+import { formatPhone, isValidPhone, normalizePhone } from '../../shared/utils/phone'
 
 const { initData, ready, isTelegram, haptic } = useTelegram()
 const { apiFetch } = useApi(initData)
@@ -9,9 +10,11 @@ const authError = ref('')
 const pricePerKg = ref(1000)
 const userName = ref('')
 
+const phone = ref('')
 const name = ref('')
-const code = ref('')
 const weight = ref('')
+const nameLocked = ref(false)
+const lookingUp = ref(false)
 
 const submitting = ref(false)
 const loadingGoods = ref(false)
@@ -19,6 +22,7 @@ const exporting = ref(false)
 const toast = ref<{ type: 'success' | 'error', message: string } | null>(null)
 const goods = ref<CustomerGood[]>([])
 
+const filtersOpen = ref(false)
 const search = ref('')
 const paidFilter = ref<'all' | 'paid' | 'unpaid'>('all')
 const dateFrom = ref('')
@@ -27,18 +31,20 @@ const filtersActive = computed(() =>
   search.value.trim().length > 0 || paidFilter.value !== 'all' || !!dateFrom.value || !!dateTo.value,
 )
 
+const phoneRef = ref<HTMLInputElement>()
 const nameRef = ref<HTMLInputElement>()
-const codeRef = ref<HTMLInputElement>()
 const weightRef = ref<HTMLInputElement>()
 
 let searchDebounce: ReturnType<typeof setTimeout> | undefined
+let phoneLookupToken = 0
 
+const phoneDigits = computed(() => normalizePhone(phone.value))
 const weightNum = computed(() => parseFloat(weight.value.replace(',', '.')) || 0)
 const calculatedPrice = computed(() => Math.round(weightNum.value * pricePerKg.value * 100) / 100)
 
 const canSubmit = computed(() =>
-  name.value.trim().length > 0
-  && /^\d{4}$/.test(code.value)
+  isValidPhone(phoneDigits.value)
+  && name.value.trim().length > 0
   && weightNum.value > 0
   && !submitting.value,
 )
@@ -70,7 +76,7 @@ async function checkAuth() {
     userName.value = res.user.first_name
     authState.value = 'ok'
     await loadGoods()
-    nextTick(() => nameRef.value?.focus())
+    nextTick(() => phoneRef.value?.focus())
   }
   catch (e) {
     authState.value = 'denied'
@@ -119,8 +125,7 @@ function buildExportQuery() {
 function formatExportRows(rows: CustomerGood[]) {
   return rows
     .map((item, index) => {
-      const itemCode = String(item.code).padStart(4, '0')
-      return `${index + 1}. ${item.name}-${itemCode}, ${item.weight} | ${item.price}`
+      return `${index + 1}. ${item.name}-${formatPhone(item.phone)}, ${item.weight} | ${item.price}`
     })
     .join('\n')
 }
@@ -167,12 +172,45 @@ async function copyExport() {
   }
 }
 
-function onCodeInput(e: Event) {
+async function lookupCustomer() {
+  if (!isValidPhone(phoneDigits.value)) return
+
+  const token = ++phoneLookupToken
+  lookingUp.value = true
+  try {
+    const customer = await apiFetch<{ id: number, name: string, phone: string } | null>(
+      `/api/customers/${phoneDigits.value}`,
+    )
+
+    if (token !== phoneLookupToken) return
+
+    if (customer?.name) {
+      name.value = customer.name
+      nameLocked.value = true
+      nextTick(() => weightRef.value?.focus())
+    }
+    else {
+      nameLocked.value = false
+      if (!name.value) nextTick(() => nameRef.value?.focus())
+    }
+  }
+  catch {
+    if (token === phoneLookupToken) nameLocked.value = false
+  }
+  finally {
+    if (token === phoneLookupToken) lookingUp.value = false
+  }
+}
+
+function onPhoneInput(e: Event) {
   const input = e.target as HTMLInputElement
-  code.value = input.value.replace(/\D/g, '').slice(0, 4)
-  input.value = code.value
-  if (code.value.length === 4) {
-    weightRef.value?.focus()
+  const digits = normalizePhone(input.value)
+  phone.value = formatPhone(digits)
+  input.value = phone.value
+  nameLocked.value = false
+
+  if (digits.length === 9) {
+    lookupCustomer()
   }
 }
 
@@ -192,10 +230,11 @@ function showToast(type: 'success' | 'error', message: string) {
 }
 
 function resetForm() {
+  phone.value = ''
   name.value = ''
-  code.value = ''
   weight.value = ''
-  nextTick(() => nameRef.value?.focus())
+  nameLocked.value = false
+  nextTick(() => phoneRef.value?.focus())
 }
 
 async function submit() {
@@ -206,8 +245,8 @@ async function submit() {
     const item = await apiFetch<CustomerGood>('/api/goods', {
       method: 'POST',
       body: JSON.stringify({
+        phone: phoneDigits.value,
         name: name.value.trim(),
-        code: code.value,
         weight: weightNum.value,
       }),
     })
@@ -246,16 +285,24 @@ function formatWeight(n: number) {
   return `${n} кг`
 }
 
-function formatTime(iso: string) {
-  return new Date(iso).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
+function formatDateTime(iso: string) {
+  return new Date(iso).toLocaleString('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    year: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+function onPhoneEnter() {
+  if (isValidPhone(phoneDigits.value)) {
+    lookupCustomer()
+  }
 }
 
 function onNameEnter() {
-  codeRef.value?.focus()
-}
-
-function onCodeEnter() {
-  if (code.value.length === 4) weightRef.value?.focus()
+  weightRef.value?.focus()
 }
 
 function onWeightEnter() {
@@ -265,20 +312,17 @@ function onWeightEnter() {
 
 <template>
   <div class="app">
-    <!-- Loading -->
     <div v-if="authState === 'loading'" class="screen center">
       <div class="spinner" />
       <p class="muted">Загрузка…</p>
     </div>
 
-    <!-- Denied -->
     <div v-else-if="authState === 'denied'" class="screen center">
       <div class="icon-block">🔒</div>
       <h1>Доступ запрещён</h1>
       <p class="muted">{{ authError }}</p>
     </div>
 
-    <!-- Main app -->
     <template v-else>
       <header class="header">
         <div>
@@ -291,8 +335,29 @@ function onWeightEnter() {
       </header>
 
       <main class="main">
-        <!-- Entry form -->
         <section class="card form-card">
+          <label class="field">
+            <span class="label">Телефон <span class="hint">без +992</span></span>
+            <div class="phone-row">
+              <span class="phone-prefix">+992</span>
+              <input
+                ref="phoneRef"
+                :value="phone"
+                type="text"
+                inputmode="numeric"
+                autocomplete="off"
+                enterkeyhint="next"
+                placeholder="### ##-##-##"
+                class="phone-input"
+                @input="onPhoneInput"
+                @keydown.enter.prevent="onPhoneEnter"
+                @blur="lookupCustomer"
+              >
+            </div>
+            <span v-if="lookingUp" class="field-hint">Ищем клиента…</span>
+            <span v-else-if="nameLocked" class="field-hint ok">Клиент найден — имя подставлено</span>
+          </label>
+
           <label class="field">
             <span class="label">Имя клиента</span>
             <input
@@ -304,24 +369,6 @@ function onWeightEnter() {
               enterkeyhint="next"
               placeholder="Полное имя"
               @keydown.enter.prevent="onNameEnter"
-            >
-          </label>
-
-          <label class="field">
-            <span class="label">Код <span class="hint">4 цифры</span></span>
-            <input
-              ref="codeRef"
-              :value="code"
-              type="text"
-              inputmode="numeric"
-              pattern="[0-9]*"
-              maxlength="4"
-              autocomplete="off"
-              enterkeyhint="next"
-              placeholder="0000"
-              class="code-input"
-              @input="onCodeInput"
-              @keydown.enter.prevent="onCodeEnter"
             >
           </label>
 
@@ -356,54 +403,62 @@ function onWeightEnter() {
           </button>
         </section>
 
-        <!-- Filters -->
         <section class="card filters-card">
-          <label class="field">
-            <span class="label">Поиск</span>
-            <input
-              v-model="search"
-              type="text"
-              autocomplete="off"
-              placeholder="Имя или код"
-              class="search-input"
-            >
-          </label>
+          <button class="filters-toggle" type="button" @click="filtersOpen = !filtersOpen">
+            <span>
+              Фильтры и экспорт
+              <span v-if="filtersActive" class="filters-badge">активны</span>
+            </span>
+            <span class="chevron" :class="{ open: filtersOpen }">▾</span>
+          </button>
 
-          <div class="filter-row">
+          <div v-show="filtersOpen" class="filters-body">
             <label class="field">
-              <span class="label">Статус</span>
-              <select v-model="paidFilter" class="select-input">
-                <option value="all">Все</option>
-                <option value="paid">Оплачено</option>
-                <option value="unpaid">Не оплачено</option>
-              </select>
+              <span class="label">Поиск</span>
+              <input
+                v-model="search"
+                type="text"
+                autocomplete="off"
+                placeholder="Имя или телефон"
+                class="search-input"
+              >
             </label>
-          </div>
 
-          <div class="filter-row two">
-            <label class="field">
-              <span class="label">Дата с</span>
-              <input v-model="dateFrom" type="date" class="date-input">
-            </label>
-            <label class="field">
-              <span class="label">Дата по</span>
-              <input v-model="dateTo" type="date" class="date-input">
-            </label>
-          </div>
+            <div class="filter-row">
+              <label class="field">
+                <span class="label">Статус</span>
+                <select v-model="paidFilter" class="select-input">
+                  <option value="all">Все</option>
+                  <option value="paid">Оплачено</option>
+                  <option value="unpaid">Не оплачено</option>
+                </select>
+              </label>
+            </div>
 
-          <div class="export-block">
-            <span class="export-title">Экспорт за выбранный период</span>
-            <button class="export-btn" :disabled="exporting" @click="copyExport">
-              {{ exporting ? 'Копирование…' : 'Копировать список' }}
+            <div class="filter-row two">
+              <label class="field">
+                <span class="label">Дата с</span>
+                <input v-model="dateFrom" type="date" class="date-input">
+              </label>
+              <label class="field">
+                <span class="label">Дата по</span>
+                <input v-model="dateTo" type="date" class="date-input">
+              </label>
+            </div>
+
+            <div class="export-block">
+              <span class="export-title">Экспорт за выбранный период</span>
+              <button class="export-btn" :disabled="exporting" @click="copyExport">
+                {{ exporting ? 'Копирование…' : 'Копировать список' }}
+              </button>
+            </div>
+
+            <button v-if="filtersActive" class="clear-btn" @click="clearFilters">
+              Очистить фильтры
             </button>
           </div>
-
-          <button v-if="filtersActive" class="clear-btn" @click="clearFilters">
-            Очистить фильтры
-          </button>
         </section>
 
-        <!-- Recent entries -->
         <section v-if="goods.length" class="list-section">
           <h2 class="section-title">
             {{ filtersActive ? 'Результаты' : 'Последние' }}
@@ -414,9 +469,12 @@ function onWeightEnter() {
               <div class="goods-info">
                 <span class="goods-name">{{ item.name }}</span>
                 <span class="goods-meta">
-                  <span class="badge">{{ item.code }}</span>
+                  <span class="badge">{{ formatPhone(item.phone) }}</span>
                   {{ formatWeight(item.weight) }} · {{ formatPrice(item.price) }}
-                  · {{ formatTime(item.created_at) }}
+                  · {{ formatDateTime(item.created_at) }}
+                </span>
+                <span v-if="item.initiator" class="goods-initiator">
+                  Оплату отметил: {{ item.initiator }}
                 </span>
               </div>
               <button
@@ -436,7 +494,6 @@ function onWeightEnter() {
         </p>
       </main>
 
-      <!-- Toast -->
       <Transition name="toast">
         <div v-if="toast" class="toast" :class="toast.type">
           {{ toast.message }}
@@ -521,9 +578,45 @@ function onWeightEnter() {
 }
 
 .filters-card {
+  padding: 0;
+  overflow: hidden;
+}
+
+.filters-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--tg-theme-text-color, #111);
+}
+
+.filters-badge {
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--tg-theme-button-color, #3390ec);
+  color: var(--tg-theme-button-text-color, #fff);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.chevron {
+  transition: transform 0.2s;
+  color: var(--tg-theme-hint-color, #888);
+}
+
+.chevron.open {
+  transform: rotate(180deg);
+}
+
+.filters-body {
   display: flex;
   flex-direction: column;
   gap: 14px;
+  padding: 0 20px 20px;
 }
 
 .filter-row {
@@ -555,6 +648,15 @@ function onWeightEnter() {
   letter-spacing: 0;
 }
 
+.field-hint {
+  font-size: 12px;
+  color: var(--tg-theme-hint-color, #888);
+}
+
+.field-hint.ok {
+  color: #15803d;
+}
+
 .field input,
 .field select {
   width: 100%;
@@ -572,18 +674,30 @@ function onWeightEnter() {
   border-color: var(--tg-theme-button-color, #3390ec);
 }
 
+.phone-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.phone-prefix {
+  flex-shrink: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--tg-theme-hint-color, #666);
+}
+
+.phone-input {
+  font-size: 22px !important;
+  font-weight: 700;
+  letter-spacing: 1px;
+  font-variant-numeric: tabular-nums;
+}
+
 .search-input,
 .select-input,
 .date-input {
   font-size: 15px !important;
-}
-
-.code-input {
-  font-size: 28px !important;
-  font-weight: 700;
-  letter-spacing: 8px;
-  text-align: center;
-  font-variant-numeric: tabular-nums;
 }
 
 .weight-input {
@@ -728,6 +842,11 @@ function onWeightEnter() {
 .goods-meta {
   font-size: 12px;
   color: var(--tg-theme-hint-color, #888);
+}
+
+.goods-initiator {
+  font-size: 11px;
+  color: var(--tg-theme-hint-color, #999);
 }
 
 .badge {

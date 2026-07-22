@@ -1,6 +1,6 @@
 import { createError, getQuery } from 'h3'
 import { requireTelegramAuth } from '../../utils/auth'
-import { useSupabaseAdmin, type CustomerGood } from '../../utils/supabase'
+import { GOODS_SELECT, mapGoodRow, useSupabaseAdmin, type CustomerGood } from '../../utils/supabase'
 
 const PAGE_SIZE = 1000
 
@@ -16,7 +16,7 @@ export default defineEventHandler(async (event) => {
   for (let from = 0; ; from += PAGE_SIZE) {
     let builder = supabase
       .from('goods')
-      .select('*')
+      .select(GOODS_SELECT)
       .order('created_at', { ascending: true })
       .range(from, from + PAGE_SIZE - 1)
 
@@ -34,7 +34,7 @@ export default defineEventHandler(async (event) => {
       throw createError({ statusCode: 500, statusMessage: error.message })
     }
 
-    rows.push(...(data as CustomerGood[]))
+    rows.push(...(data ?? []).map(mapGoodRow))
 
     if (!data || data.length < PAGE_SIZE) {
       break
