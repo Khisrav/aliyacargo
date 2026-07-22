@@ -32,12 +32,14 @@ interface CustomerProfile {
 const route = useRoute()
 const { initData, ready, haptic } = useTelegram()
 const { apiFetch } = useApi(initData)
+const { requireWorker } = useWorkerGate()
 
 const state = ref<'loading' | 'ok' | 'error'>('loading')
 const errorMessage = ref('')
 const profile = ref<CustomerProfile | null>(null)
 const toast = ref<{ type: 'success' | 'error', message: string } | null>(null)
 const paidFilter = ref<'all' | 'paid' | 'unpaid'>('all')
+const gated = ref(false)
 
 const customerId = computed(() => Number(route.params.id))
 
@@ -48,8 +50,15 @@ const filteredGoods = computed(() => {
   return goods
 })
 
-watch(ready, load, { immediate: true })
-watch(() => route.params.id, load)
+watch(ready, async () => {
+  if (!ready.value) return
+  if (!(await requireWorker())) return
+  gated.value = true
+  await load()
+}, { immediate: true })
+watch(() => route.params.id, () => {
+  if (gated.value) load()
+})
 
 async function load() {
   if (!ready.value || !Number.isFinite(customerId.value)) return

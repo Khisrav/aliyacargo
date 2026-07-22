@@ -2,8 +2,9 @@
 import type { CustomerGood } from '~/composables/useTelegram'
 import { formatPhone, isValidPhone, normalizePhone } from '#shared/utils/phone'
 
-const { initData, ready, isTelegram, haptic } = useTelegram()
+const { initData, ready, haptic } = useTelegram()
 const { apiFetch } = useApi(initData)
+const { requireWorker } = useWorkerGate()
 
 const authState = ref<'loading' | 'ok' | 'denied' | 'error'>('loading')
 const authError = ref('')
@@ -42,13 +43,8 @@ watch(ready, checkAuth, { immediate: true })
 async function checkAuth() {
   if (!ready.value) return
 
-  if (!initData.value && !import.meta.dev) {
-    authState.value = 'denied'
-    authError.value = isTelegram.value
-      ? 'Не удалось получить сессию Telegram. Закройте и снова откройте приложение.'
-      : 'Откройте это приложение через Telegram-бота.'
-    return
-  }
+  const allowed = await requireWorker()
+  if (!allowed) return
 
   try {
     const res = await apiFetch<{ ok: boolean, pricePerKg: number, user: { first_name: string } }>(

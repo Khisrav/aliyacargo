@@ -53,6 +53,7 @@ interface StatsResponse {
 
 const { initData, ready } = useTelegram()
 const { apiFetch } = useApi(initData)
+const { requireWorker } = useWorkerGate()
 
 const state = ref<'loading' | 'ok' | 'error'>('loading')
 const errorMessage = ref('')
@@ -63,7 +64,11 @@ const maxDailyRevenue = computed(() => {
   return Math.max(1, ...stats.value.daily.map(d => d.revenue))
 })
 
-watch(ready, load, { immediate: true })
+watch(ready, async () => {
+  if (!ready.value) return
+  if (!(await requireWorker())) return
+  await load()
+}, { immediate: true })
 
 async function load() {
   if (!ready.value) return

@@ -4,6 +4,7 @@ import { formatPhone } from '#shared/utils/phone'
 
 const { initData, ready, haptic } = useTelegram()
 const { apiFetch } = useApi(initData)
+const { requireWorker } = useWorkerGate()
 
 const state = ref<'loading' | 'ok' | 'error'>('loading')
 const errorMessage = ref('')
@@ -23,11 +24,19 @@ const filtersActive = computed(() =>
 
 let searchDebounce: ReturnType<typeof setTimeout> | undefined
 
-watch(ready, load, { immediate: true })
-watch([paidFilter, dateFrom, dateTo], load)
+watch(ready, async () => {
+  if (!ready.value) return
+  if (!(await requireWorker())) return
+  await load()
+}, { immediate: true })
+watch([paidFilter, dateFrom, dateTo], () => {
+  if (state.value === 'ok') load()
+})
 watch(search, () => {
   if (searchDebounce) clearTimeout(searchDebounce)
-  searchDebounce = setTimeout(load, 300)
+  searchDebounce = setTimeout(() => {
+    if (state.value === 'ok' || state.value === 'error') load()
+  }, 300)
 })
 
 function buildQuery() {
@@ -75,7 +84,9 @@ function buildExportQuery() {
 
 function formatExportRows(rows: CustomerGood[]) {
   return rows
-    .map((item, index) => `${index + 1}. ${item.name}-${formatPhone(item.phone)}, ${item.weight} | ${item.price}`)
+    .map((item, index) => {
+      return `${index + 1}. ${item.name} — ${formatPhone(item.phone)} — ${item.weight} кг — ${item.price} с.`
+    })
     .join('\n')
 }
 

@@ -16,6 +16,7 @@ interface CustomerListItem {
 
 const { initData, ready } = useTelegram()
 const { apiFetch } = useApi(initData)
+const { requireWorker } = useWorkerGate()
 
 const state = ref<'loading' | 'ok' | 'error'>('loading')
 const errorMessage = ref('')
@@ -39,12 +40,22 @@ const filtersActive = computed(() =>
 )
 
 let searchDebounce: ReturnType<typeof setTimeout> | undefined
+const gated = ref(false)
 
-watch(ready, load, { immediate: true })
-watch([debtFilter, activityFrom, activityTo, minGoods, sort], load)
+watch(ready, async () => {
+  if (!ready.value) return
+  if (!(await requireWorker())) return
+  gated.value = true
+  await load()
+}, { immediate: true })
+watch([debtFilter, activityFrom, activityTo, minGoods, sort], () => {
+  if (gated.value) load()
+})
 watch(search, () => {
   if (searchDebounce) clearTimeout(searchDebounce)
-  searchDebounce = setTimeout(load, 300)
+  searchDebounce = setTimeout(() => {
+    if (gated.value) load()
+  }, 300)
 })
 
 async function load() {
