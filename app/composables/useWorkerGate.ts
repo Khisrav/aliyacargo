@@ -1,4 +1,4 @@
-export async function useWorkerGate() {
+export function useWorkerGate() {
   const { initData, ready, isTelegram } = useTelegram()
   const { apiFetch } = useApi(initData)
 
