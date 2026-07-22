@@ -1,7 +1,7 @@
 import { createError } from 'h3'
 import { requireTelegramAuth } from '../../utils/auth'
 import { useSupabaseAdmin } from '../../utils/supabase'
-import { isValidPhone, normalizePhone } from '../../../shared/utils/phone'
+import { isValidPhone, normalizePhone } from '#shared/utils/phone'
 
 export default defineEventHandler(async (event) => {
   requireTelegramAuth(event)

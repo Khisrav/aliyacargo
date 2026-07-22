@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { CustomerGood } from '~/composables/useTelegram'
-import { formatPhone, isValidPhone, normalizePhone } from '../../shared/utils/phone'
+import { formatPhone, isValidPhone, normalizePhone } from '#shared/utils/phone'
 
 const { initData, ready, isTelegram, haptic } = useTelegram()
 const { apiFetch } = useApi(initData)

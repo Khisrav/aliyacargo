@@ -1,7 +1,7 @@
 import { createError, readBody } from 'h3'
 import { requireTelegramAuth } from '../../utils/auth'
 import { GOODS_SELECT, mapGoodRow, useSupabaseAdmin } from '../../utils/supabase'
-import { isValidPhone, normalizePhone } from '../../../shared/utils/phone'
+import { isValidPhone, normalizePhone } from '#shared/utils/phone'
 
 interface CreateGoodBody {
   phone?: string

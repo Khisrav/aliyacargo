@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { formatPhone } from '../../shared/utils/phone'
+import { formatPhone } from '#shared/utils/phone'
 
 interface DayBucket {
   date: string

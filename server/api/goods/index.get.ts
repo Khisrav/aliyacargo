@@ -1,7 +1,7 @@
 import { createError, getQuery } from 'h3'
 import { requireTelegramAuth } from '../../utils/auth'
 import { GOODS_SELECT, mapGoodRow, useSupabaseAdmin } from '../../utils/supabase'
-import { digitsOnly } from '../../../shared/utils/phone'
+import { digitsOnly } from '#shared/utils/phone'
 
 export default defineEventHandler(async (event) => {
   requireTelegramAuth(event)
