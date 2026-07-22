@@ -17,25 +17,13 @@ const nameLocked = ref(false)
 const lookingUp = ref(false)
 
 const submitting = ref(false)
-const loadingGoods = ref(false)
-const exporting = ref(false)
 const toast = ref<{ type: 'success' | 'error', message: string } | null>(null)
-const goods = ref<CustomerGood[]>([])
-
-const filtersOpen = ref(false)
-const search = ref('')
-const paidFilter = ref<'all' | 'paid' | 'unpaid'>('all')
-const dateFrom = ref('')
-const dateTo = ref('')
-const filtersActive = computed(() =>
-  search.value.trim().length > 0 || paidFilter.value !== 'all' || !!dateFrom.value || !!dateTo.value,
-)
+const sessionGoods = ref<CustomerGood[]>([])
 
 const phoneRef = ref<HTMLInputElement>()
 const nameRef = ref<HTMLInputElement>()
 const weightRef = ref<HTMLInputElement>()
 
-let searchDebounce: ReturnType<typeof setTimeout> | undefined
 let phoneLookupToken = 0
 
 const phoneDigits = computed(() => normalizePhone(phone.value))
@@ -50,11 +38,6 @@ const canSubmit = computed(() =>
 )
 
 watch(ready, checkAuth, { immediate: true })
-watch([paidFilter, dateFrom, dateTo], loadGoods)
-watch(search, () => {
-  if (searchDebounce) clearTimeout(searchDebounce)
-  searchDebounce = setTimeout(loadGoods, 300)
-})
 
 async function checkAuth() {
   if (!ready.value) return
@@ -75,100 +58,11 @@ async function checkAuth() {
     pricePerKg.value = res.pricePerKg
     userName.value = res.user.first_name
     authState.value = 'ok'
-    await loadGoods()
     nextTick(() => phoneRef.value?.focus())
   }
   catch (e) {
     authState.value = 'denied'
     authError.value = e instanceof Error ? e.message : 'Доступ запрещён'
-  }
-}
-
-function buildQuery() {
-  const params = new URLSearchParams()
-  if (search.value.trim()) params.set('search', search.value.trim())
-  if (paidFilter.value !== 'all') params.set('paid', paidFilter.value)
-  if (dateFrom.value) params.set('dateFrom', dateFrom.value)
-  if (dateTo.value) params.set('dateTo', dateTo.value)
-  const qs = params.toString()
-  return qs ? `/api/goods?${qs}` : '/api/goods'
-}
-
-async function loadGoods() {
-  loadingGoods.value = true
-  try {
-    goods.value = await apiFetch<CustomerGood[]>(buildQuery())
-  }
-  catch {
-    // non-blocking
-  }
-  finally {
-    loadingGoods.value = false
-  }
-}
-
-function clearFilters() {
-  search.value = ''
-  paidFilter.value = 'all'
-  dateFrom.value = ''
-  dateTo.value = ''
-}
-
-function buildExportQuery() {
-  const params = new URLSearchParams()
-  if (dateFrom.value) params.set('dateFrom', dateFrom.value)
-  if (dateTo.value) params.set('dateTo', dateTo.value)
-  const qs = params.toString()
-  return qs ? `/api/goods/export?${qs}` : '/api/goods/export'
-}
-
-function formatExportRows(rows: CustomerGood[]) {
-  return rows
-    .map((item, index) => {
-      return `${index + 1}. ${item.name}-${formatPhone(item.phone)}, ${item.weight} | ${item.price}`
-    })
-    .join('\n')
-}
-
-async function getExportText() {
-  if (dateFrom.value && dateTo.value && dateFrom.value > dateTo.value) {
-    throw new Error('Дата начала не может быть позже даты окончания')
-  }
-
-  const rows = await apiFetch<CustomerGood[]>(buildExportQuery())
-  if (!rows.length) {
-    throw new Error('За выбранный период записей нет')
-  }
-
-  return formatExportRows(rows)
-}
-
-async function copyExport() {
-  exporting.value = true
-  try {
-    const text = await getExportText()
-
-    try {
-      await navigator.clipboard.writeText(text)
-    }
-    catch {
-      const textarea = document.createElement('textarea')
-      textarea.value = text
-      textarea.style.position = 'fixed'
-      textarea.style.opacity = '0'
-      document.body.appendChild(textarea)
-      textarea.select()
-      document.execCommand('copy')
-      textarea.remove()
-    }
-
-    showToast('success', 'Данные скопированы')
-  }
-  catch (e) {
-    showToast('error', e instanceof Error ? e.message : 'Не удалось скопировать')
-  }
-  finally {
-    exporting.value = false
   }
 }
 
@@ -250,7 +144,7 @@ async function submit() {
         weight: weightNum.value,
       }),
     })
-    if (!filtersActive.value) goods.value.unshift(item)
+    sessionGoods.value.unshift(item)
     showToast('success', `Сохранено · ${item.name} · ${formatPrice(item.price)}`)
     resetForm()
   }
@@ -268,8 +162,8 @@ async function togglePaid(item: CustomerGood) {
       method: 'PATCH',
       body: JSON.stringify({ has_paid: !item.has_paid }),
     })
-    const idx = goods.value.findIndex(g => g.id === item.id)
-    if (idx !== -1) goods.value[idx] = updated
+    const idx = sessionGoods.value.findIndex(g => g.id === item.id)
+    if (idx !== -1) sessionGoods.value[idx] = updated
     haptic('light')
   }
   catch (e) {
@@ -329,9 +223,9 @@ function onWeightEnter() {
           <h1>Взвешивание</h1>
           <p v-if="userName" class="greeting">Привет, {{ userName }}</p>
         </div>
-        <button class="refresh-btn" aria-label="Обновить список" @click="loadGoods">
-          ↻
-        </button>
+        <NuxtLink to="/goods" class="link-btn">
+          Все записи
+        </NuxtLink>
       </header>
 
       <main class="main">
@@ -403,69 +297,13 @@ function onWeightEnter() {
           </button>
         </section>
 
-        <section class="card filters-card">
-          <button class="filters-toggle" type="button" @click="filtersOpen = !filtersOpen">
-            <span>
-              Фильтры и экспорт
-              <span v-if="filtersActive" class="filters-badge">активны</span>
-            </span>
-            <span class="chevron" :class="{ open: filtersOpen }">▾</span>
-          </button>
-
-          <div v-show="filtersOpen" class="filters-body">
-            <label class="field">
-              <span class="label">Поиск</span>
-              <input
-                v-model="search"
-                type="text"
-                autocomplete="off"
-                placeholder="Имя или телефон"
-                class="search-input"
-              >
-            </label>
-
-            <div class="filter-row">
-              <label class="field">
-                <span class="label">Статус</span>
-                <select v-model="paidFilter" class="select-input">
-                  <option value="all">Все</option>
-                  <option value="paid">Оплачено</option>
-                  <option value="unpaid">Не оплачено</option>
-                </select>
-              </label>
-            </div>
-
-            <div class="filter-row two">
-              <label class="field">
-                <span class="label">Дата с</span>
-                <input v-model="dateFrom" type="date" class="date-input">
-              </label>
-              <label class="field">
-                <span class="label">Дата по</span>
-                <input v-model="dateTo" type="date" class="date-input">
-              </label>
-            </div>
-
-            <div class="export-block">
-              <span class="export-title">Экспорт за выбранный период</span>
-              <button class="export-btn" :disabled="exporting" @click="copyExport">
-                {{ exporting ? 'Копирование…' : 'Копировать список' }}
-              </button>
-            </div>
-
-            <button v-if="filtersActive" class="clear-btn" @click="clearFilters">
-              Очистить фильтры
-            </button>
-          </div>
-        </section>
-
-        <section v-if="goods.length" class="list-section">
+        <section v-if="sessionGoods.length" class="list-section">
           <h2 class="section-title">
-            {{ filtersActive ? 'Результаты' : 'Последние' }}
-            <span class="count">{{ goods.length }}</span>
+            В этой сессии
+            <span class="count">{{ sessionGoods.length }}</span>
           </h2>
           <ul class="goods-list">
-            <li v-for="item in goods" :key="item.id" class="goods-item">
+            <li v-for="item in sessionGoods" :key="item.id" class="goods-item">
               <div class="goods-info">
                 <span class="goods-name">{{ item.name }}</span>
                 <span class="goods-meta">
@@ -473,14 +311,10 @@ function onWeightEnter() {
                   {{ formatWeight(item.weight) }} · {{ formatPrice(item.price) }}
                   · {{ formatDateTime(item.created_at) }}
                 </span>
-                <span v-if="item.initiator" class="goods-initiator">
-                  Оплату отметил: {{ item.initiator }}
-                </span>
               </div>
               <button
                 class="paid-btn"
                 :class="{ paid: item.has_paid }"
-                :aria-label="item.has_paid ? 'Отметить как неоплаченное' : 'Отметить как оплаченное'"
                 @click="togglePaid(item)"
               >
                 {{ item.has_paid ? '✓ Оплачено' : 'Не оплачено' }}
@@ -489,8 +323,8 @@ function onWeightEnter() {
           </ul>
         </section>
 
-        <p v-else-if="!loadingGoods" class="empty muted">
-          {{ filtersActive ? 'Ничего не найдено по заданным фильтрам.' : 'Записей пока нет. Добавьте первую выше.' }}
+        <p v-else class="empty muted">
+          Записей в этой сессии пока нет. Добавьте первую выше.
         </p>
       </main>
 
@@ -531,6 +365,7 @@ function onWeightEnter() {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
+  gap: 12px;
   padding: 20px 20px 8px;
 }
 
@@ -546,16 +381,15 @@ function onWeightEnter() {
   margin-top: 2px;
 }
 
-.refresh-btn {
-  width: 40px;
-  height: 40px;
+.link-btn {
+  flex-shrink: 0;
+  padding: 10px 12px;
   border-radius: 12px;
   background: var(--tg-theme-secondary-bg-color, #eee);
-  color: var(--tg-theme-text-color, #333);
-  font-size: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  color: var(--tg-theme-button-color, #3390ec);
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
 }
 
 .main {
@@ -575,57 +409,6 @@ function onWeightEnter() {
   display: flex;
   flex-direction: column;
   gap: 16px;
-}
-
-.filters-card {
-  padding: 0;
-  overflow: hidden;
-}
-
-.filters-toggle {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 20px;
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--tg-theme-text-color, #111);
-}
-
-.filters-badge {
-  margin-left: 8px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: var(--tg-theme-button-color, #3390ec);
-  color: var(--tg-theme-button-text-color, #fff);
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.chevron {
-  transition: transform 0.2s;
-  color: var(--tg-theme-hint-color, #888);
-}
-
-.chevron.open {
-  transform: rotate(180deg);
-}
-
-.filters-body {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  padding: 0 20px 20px;
-}
-
-.filter-row {
-  display: flex;
-  gap: 12px;
-}
-
-.filter-row.two > .field {
-  flex: 1;
 }
 
 .field {
@@ -657,8 +440,7 @@ function onWeightEnter() {
   color: #15803d;
 }
 
-.field input,
-.field select {
+.field input {
   width: 100%;
   padding: 14px 16px;
   border-radius: 12px;
@@ -669,8 +451,7 @@ function onWeightEnter() {
   transition: border-color 0.15s;
 }
 
-.field input:focus,
-.field select:focus {
+.field input:focus {
   border-color: var(--tg-theme-button-color, #3390ec);
 }
 
@@ -692,12 +473,6 @@ function onWeightEnter() {
   font-weight: 700;
   letter-spacing: 1px;
   font-variant-numeric: tabular-nums;
-}
-
-.search-input,
-.select-input,
-.date-input {
-  font-size: 15px !important;
 }
 
 .weight-input {
@@ -758,43 +533,6 @@ function onWeightEnter() {
   cursor: not-allowed;
 }
 
-.export-block {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding-top: 2px;
-}
-
-.export-title {
-  font-size: 12px;
-  color: var(--tg-theme-hint-color, #888);
-}
-
-.export-btn {
-  width: 100%;
-  padding: 12px;
-  border-radius: 12px;
-  background: var(--tg-theme-button-color, #3390ec);
-  color: var(--tg-theme-button-text-color, #fff);
-  font-size: 14px;
-  font-weight: 700;
-}
-
-.export-btn:disabled {
-  opacity: 0.5;
-  cursor: wait;
-}
-
-.clear-btn {
-  align-self: flex-start;
-  padding: 8px 14px;
-  border-radius: 10px;
-  font-size: 13px;
-  font-weight: 600;
-  background: var(--tg-theme-bg-color, #f0f0f0);
-  color: var(--tg-theme-button-color, #3390ec);
-}
-
 .section-title {
   font-size: 15px;
   font-weight: 600;
@@ -842,11 +580,6 @@ function onWeightEnter() {
 .goods-meta {
   font-size: 12px;
   color: var(--tg-theme-hint-color, #888);
-}
-
-.goods-initiator {
-  font-size: 11px;
-  color: var(--tg-theme-hint-color, #999);
 }
 
 .badge {

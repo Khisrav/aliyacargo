@@ -113,7 +113,7 @@ export default defineEventHandler(async (event) => {
   const week = emptyPeriod()
   const month = emptyPeriod()
 
-  const days = 14
+  const days = 7
   const buckets: DayBucket[] = []
   for (let i = days - 1; i >= 0; i--) {
     const d = new Date(now)

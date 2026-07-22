@@ -4,6 +4,8 @@ const route = useRoute()
 
 const links = [
   { to: '/', label: 'Взвешивание', icon: '⚖️' },
+  { to: '/goods', label: 'Записи', icon: '📦' },
+  { to: '/clients', label: 'Клиенты', icon: '👥' },
   { to: '/stats', label: 'Статистика', icon: '📊' },
 ]
 
@@ -41,7 +43,7 @@ watch(() => route.fullPath, closeMenu)
           :key="link.to"
           :to="link.to"
           class="drawer-link"
-          :class="{ active: route.path === link.to }"
+          :class="{ active: link.to === '/' ? route.path === '/' : route.path.startsWith(link.to) }"
           @click="closeMenu"
         >
           <span class="drawer-icon">{{ link.icon }}</span>
