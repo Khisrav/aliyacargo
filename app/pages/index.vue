@@ -71,7 +71,7 @@ async function lookupCustomer() {
     const customer = await apiFetch<{ id: number, name: string, phone: string } | null>(
       `/api/customers/${phoneDigits.value}`,
     )
-
+ 
     if (token !== phoneLookupToken) return
 
     if (customer?.name) {
