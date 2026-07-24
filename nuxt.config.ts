@@ -2,7 +2,6 @@
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },
-
   css: ['~/assets/css/main.css'],
 
   app: {
@@ -29,6 +28,24 @@ export default defineNuxtConfig({
     pricePerKg: Number(process.env.PRICE_PER_KG) || 1000,
     public: {
       appUrl: process.env.NUXT_PUBLIC_APP_URL || '',
+    },
+  },
+
+  modules: ['@nuxtjs/i18n'],
+
+  i18n: {
+    defaultLocale: 'ru',
+    strategy: 'no_prefix',
+    locales: [
+      { code: 'ru', name: 'Русский', language: 'ru-RU', file: 'ru.json' },
+      { code: 'tg', name: 'Тоҷикӣ', language: 'tg-TJ', file: 'tg.json' },
+      { code: 'uz', name: 'Oʻzbekcha', language: 'uz-UZ', file: 'uz.json' },
+    ],
+    detectBrowserLanguage: {
+      useCookie: true,
+      cookieKey: 'aliya_locale',
+      fallbackLocale: 'ru',
+      redirectOn: 'root',
     },
   },
 })

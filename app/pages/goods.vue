@@ -140,6 +140,18 @@ async function togglePaid(item: CustomerGood) {
   }
 }
 
+async function removeGood(item: CustomerGood) {
+  if (!confirm(`Удалить запись «${item.name}» в корзину?`)) return
+  try {
+    await apiFetch(`/api/trash/goods/${item.id}`, { method: 'DELETE' })
+    goods.value = goods.value.filter(g => g.id !== item.id)
+    showToast('success', 'Перемещено в корзину')
+  }
+  catch (e) {
+    showToast('error', e instanceof Error ? e.message : 'Не удалось удалить')
+  }
+}
+
 function showToast(type: 'success' | 'error', message: string) {
   toast.value = { type, message }
   haptic(type)
@@ -263,13 +275,18 @@ function formatDateTime(iso: string) {
                 Оплату отметил: {{ item.initiator }}
               </span>
             </div>
-            <button
-              class="paid-btn"
-              :class="{ paid: item.has_paid }"
-              @click="togglePaid(item)"
-            >
-              {{ item.has_paid ? '✓ Оплачено' : 'Не оплачено' }}
-            </button>
+            <div class="goods-actions">
+              <button
+                class="paid-btn"
+                :class="{ paid: item.has_paid }"
+                @click="togglePaid(item)"
+              >
+                {{ item.has_paid ? '✓ Оплачено' : 'Не оплачено' }}
+              </button>
+              <button class="trash-btn" aria-label="Удалить" @click="removeGood(item)">
+                ×
+              </button>
+            </div>
           </li>
         </ul>
 
@@ -512,6 +529,26 @@ function formatDateTime(iso: string) {
 .paid-btn.paid {
   background: #dcfce7;
   color: #15803d;
+}
+
+.goods-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.trash-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: #fef2f2;
+  color: #b91c1c;
+  font-size: 22px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .screen {

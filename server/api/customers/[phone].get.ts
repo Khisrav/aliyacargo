@@ -18,6 +18,7 @@ export default defineEventHandler(async (event) => {
     .from('customers')
     .select('id, phone, name, created_at, updated_at')
     .eq('phone', phone)
+    .is('deleted_at', null)
     .maybeSingle()
 
   if (error) {

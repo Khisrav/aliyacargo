@@ -2,6 +2,7 @@ import { createError, getQuery } from 'h3'
 import { requireTelegramAuth } from '../../utils/auth'
 import { GOODS_SELECT, mapGoodRow, useSupabaseAdmin } from '../../utils/supabase'
 import { digitsOnly } from '#shared/utils/phone'
+import { purgeExpiredTrash } from '../../utils/trash'
 
 export default defineEventHandler(async (event) => {
   requireTelegramAuth(event)
@@ -13,12 +14,16 @@ export default defineEventHandler(async (event) => {
   const dateTo = typeof query.dateTo === 'string' ? query.dateTo : ''
 
   const supabase = useSupabaseAdmin()
+  await purgeExpiredTrash(supabase)
 
   let customerIds: number[] | null = null
 
   if (search) {
     const phoneDigits = digitsOnly(search)
-    let customerQuery = supabase.from('customers').select('id')
+    let customerQuery = supabase
+      .from('customers')
+      .select('id')
+      .is('deleted_at', null)
 
     if (phoneDigits.length >= 3) {
       customerQuery = customerQuery.or(`name.ilike.%${search}%,phone.ilike.%${phoneDigits}%`)
@@ -41,6 +46,7 @@ export default defineEventHandler(async (event) => {
   let builder = supabase
     .from('goods')
     .select(GOODS_SELECT)
+    .is('deleted_at', null)
     .order('created_at', { ascending: false })
     .limit(500)
 
@@ -69,5 +75,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 500, statusMessage: error.message })
   }
 
-  return (data ?? []).map(mapGoodRow)
+  return (data ?? [])
+    .filter((row: any) => !row.customers?.deleted_at)
+    .map(mapGoodRow)
 })

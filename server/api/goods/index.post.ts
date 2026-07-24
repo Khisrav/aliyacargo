@@ -39,6 +39,7 @@ export default defineEventHandler(async (event) => {
     .from('customers')
     .select('id, phone, name')
     .eq('phone', phone)
+    .is('deleted_at', null)
     .maybeSingle()
 
   if (lookupError) {
@@ -60,17 +61,52 @@ export default defineEventHandler(async (event) => {
     }
   }
   else {
-    const { data: created, error: createErrorDb } = await supabase
+    // Prefer restoring a soft-deleted customer with this phone over creating a duplicate
+    const { data: trashed } = await supabase
       .from('customers')
-      .insert({ phone, name })
-      .select('id')
-      .single()
+      .select('id, deleted_at')
+      .eq('phone', phone)
+      .not('deleted_at', 'is', null)
+      .order('deleted_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
 
-    if (createErrorDb) {
-      throw createError({ statusCode: 500, statusMessage: createErrorDb.message })
+    if (trashed?.deleted_at) {
+      const deletedAt = trashed.deleted_at
+      const { error: restoreGoodsError } = await supabase
+        .from('goods')
+        .update({ deleted_at: null })
+        .eq('customer_id', trashed.id)
+        .eq('deleted_at', deletedAt)
+
+      if (restoreGoodsError) {
+        throw createError({ statusCode: 500, statusMessage: restoreGoodsError.message })
+      }
+
+      const { error: restoreCustomerError } = await supabase
+        .from('customers')
+        .update({ name, deleted_at: null, updated_at: new Date().toISOString() })
+        .eq('id', trashed.id)
+
+      if (restoreCustomerError) {
+        throw createError({ statusCode: 500, statusMessage: restoreCustomerError.message })
+      }
+
+      customerId = trashed.id
     }
+    else {
+      const { data: created, error: createErrorDb } = await supabase
+        .from('customers')
+        .insert({ phone, name })
+        .select('id')
+        .single()
 
-    customerId = created.id
+      if (createErrorDb) {
+        throw createError({ statusCode: 500, statusMessage: createErrorDb.message })
+      }
+
+      customerId = created.id
+    }
   }
 
   const { data, error } = await supabase

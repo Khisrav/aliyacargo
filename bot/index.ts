@@ -38,6 +38,7 @@ async function lookupByPhone(phone: string) {
     .from('customers')
     .select('id, name, phone')
     .eq('phone', phone)
+    .is('deleted_at', null)
     .maybeSingle()
 
   if (customerError) {
@@ -52,6 +53,7 @@ async function lookupByPhone(phone: string) {
     .from('goods')
     .select('weight, price, has_paid, created_at')
     .eq('customer_id', customer.id)
+    .is('deleted_at', null)
     .order('created_at', { ascending: false })
     .limit(30)
 

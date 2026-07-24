@@ -29,6 +29,8 @@ interface LookupResult {
   }
 }
 
+const { t, locale } = useI18n()
+
 const phone = ref('')
 const loading = ref(false)
 const searched = ref(false)
@@ -38,6 +40,12 @@ const phoneRef = ref<HTMLInputElement>()
 
 const phoneDigits = computed(() => normalizePhone(phone.value))
 const canSearch = computed(() => isValidPhone(phoneDigits.value) && !loading.value)
+
+const numberLocale = computed(() => {
+  if (locale.value === 'uz') return 'uz-UZ'
+  if (locale.value === 'tg') return 'tg-TJ'
+  return 'ru-RU'
+})
 
 onMounted(() => {
   nextTick(() => phoneRef.value?.focus())
@@ -66,14 +74,14 @@ async function lookup() {
 
     const data = await res.json().catch(() => null)
     if (!res.ok) {
-      throw new Error(data?.statusMessage || 'Не удалось найти данные')
+      throw new Error(data?.statusMessage || t('track.lookupFailed'))
     }
 
     result.value = data as LookupResult
   }
   catch (e) {
     result.value = null
-    errorMessage.value = e instanceof Error ? e.message : 'Ошибка запроса'
+    errorMessage.value = e instanceof Error ? e.message : t('track.requestError')
   }
   finally {
     loading.value = false
@@ -81,15 +89,19 @@ async function lookup() {
 }
 
 function formatPrice(n: number) {
-  return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'TJS', maximumFractionDigits: 0 }).format(n)
+  return new Intl.NumberFormat(numberLocale.value, {
+    style: 'currency',
+    currency: 'TJS',
+    maximumFractionDigits: 0,
+  }).format(n)
 }
 
 function formatWeight(n: number) {
-  return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 }).format(n) + ' кг'
+  return new Intl.NumberFormat(numberLocale.value, { maximumFractionDigits: 1 }).format(n) + ` ${t('track.kg')}`
 }
 
 function formatDateTime(iso: string) {
-  return new Date(iso).toLocaleString('ru-RU', {
+  return new Date(iso).toLocaleString(numberLocale.value, {
     day: '2-digit',
     month: '2-digit',
     year: '2-digit',
@@ -102,14 +114,14 @@ function formatDateTime(iso: string) {
 <template>
   <div class="track-page">
     <header class="header">
-      <h1>Мой груз</h1>
-      <p class="subtitle">Введите номер телефона, чтобы посмотреть свои записи</p>
+      <h1>{{ $t('track.title') }}</h1>
+      <p class="subtitle">{{ $t('track.subtitle') }}</p>
     </header>
 
     <main class="main">
       <section class="card">
         <label class="field">
-          <span class="label">Телефон <span class="hint">без +992</span></span>
+          <span class="label">{{ $t('track.phone') }} <span class="hint">{{ $t('track.phoneHint') }}</span></span>
           <div class="phone-row">
             <span class="phone-prefix">+992</span>
             <input
@@ -127,7 +139,7 @@ function formatDateTime(iso: string) {
         </label>
 
         <button class="submit-btn" :class="{ ready: canSearch }" :disabled="!canSearch" @click="lookup">
-          {{ loading ? 'Поиск…' : 'Найти' }}
+          {{ loading ? $t('track.searching') : $t('track.search') }}
         </button>
       </section>
 
@@ -135,7 +147,7 @@ function formatDateTime(iso: string) {
 
       <template v-if="searched && result && !errorMessage">
         <section v-if="!result.found" class="card empty-card">
-          <p class="muted">По номеру +992 {{ result.displayPhone }} записей не найдено.</p>
+          <p class="muted">{{ $t('track.notFound', { phone: result.displayPhone }) }}</p>
         </section>
 
         <template v-else>
@@ -146,25 +158,25 @@ function formatDateTime(iso: string) {
 
           <section class="cards-grid">
             <div class="stat-card">
-              <span class="stat-label">Записей</span>
+              <span class="stat-label">{{ $t('track.records') }}</span>
               <span class="stat-value">{{ result.stats.totalCount }}</span>
             </div>
             <div class="stat-card">
-              <span class="stat-label">Вес</span>
+              <span class="stat-label">{{ $t('track.weight') }}</span>
               <span class="stat-value">{{ formatWeight(result.stats.totalWeight) }}</span>
             </div>
             <div class="stat-card">
-              <span class="stat-label">Сумма</span>
+              <span class="stat-label">{{ $t('track.amount') }}</span>
               <span class="stat-value">{{ formatPrice(result.stats.totalRevenue) }}</span>
             </div>
             <div class="stat-card danger">
-              <span class="stat-label">К оплате</span>
+              <span class="stat-label">{{ $t('track.toPay') }}</span>
               <span class="stat-value">{{ formatPrice(result.stats.unpaidRevenue) }}</span>
             </div>
           </section>
 
           <section class="history">
-            <h3 class="section-title">История</h3>
+            <h3 class="section-title">{{ $t('track.history') }}</h3>
             <ul v-if="result.goods.length" class="goods-list">
               <li v-for="(item, index) in result.goods" :key="`${item.created_at}-${index}`" class="goods-item">
                 <div class="goods-info">
@@ -174,17 +186,17 @@ function formatDateTime(iso: string) {
                   <span class="goods-meta">{{ formatDateTime(item.created_at) }}</span>
                 </div>
                 <span class="paid-badge" :class="{ paid: item.has_paid }">
-                  {{ item.has_paid ? 'Оплачено' : 'Не оплачено' }}
+                  {{ item.has_paid ? $t('track.paid') : $t('track.unpaid') }}
                 </span>
               </li>
             </ul>
-            <p v-else class="muted empty">Записей нет</p>
+            <p v-else class="muted empty">{{ $t('track.noItems') }}</p>
           </section>
         </template>
       </template>
 
       <p class="hint-bottom muted">
-        Только просмотр. Изменять статус оплаты могут только сотрудники.
+        {{ $t('track.viewOnly') }}
       </p>
     </main>
   </div>

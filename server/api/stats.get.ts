@@ -60,11 +60,13 @@ export default defineEventHandler(async (event) => {
     supabase
       .from('goods')
       .select(GOODS_SELECT)
+      .is('deleted_at', null)
       .order('created_at', { ascending: false })
       .limit(5000),
     supabase
       .from('customers')
-      .select('id', { count: 'exact', head: true }),
+      .select('id', { count: 'exact', head: true })
+      .is('deleted_at', null),
   ])
 
   if (error) {
@@ -75,7 +77,9 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 500, statusMessage: customersRes.error.message })
   }
 
-  const rows = (data ?? []).map(mapGoodRow)
+  const rows = (data ?? [])
+    .filter((row: any) => !row.customers?.deleted_at)
+    .map(mapGoodRow)
   const now = new Date()
   const todayKey = dateKey(now)
   const yesterday = new Date(now)

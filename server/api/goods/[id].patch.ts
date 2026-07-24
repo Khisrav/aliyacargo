@@ -25,6 +25,7 @@ export default defineEventHandler(async (event) => {
       initiator,
     })
     .eq('id', id)
+    .is('deleted_at', null)
     .select(GOODS_SELECT)
     .single()
 

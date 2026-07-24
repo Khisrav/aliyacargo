@@ -1,0 +1,23 @@
+{
+  "track": {
+    "title": "Mening yukim",
+    "subtitle": "Yozuvlaringizni ko‘rish uchun telefon raqamingizni kiriting",
+    "phone": "Telefon",
+    "phoneHint": "+992’siz",
+    "search": "Topish",
+    "searching": "Qidirilmoqda…",
+    "lookupFailed": "Ma’lumot topilmadi",
+    "requestError": "So‘rov xatosi",
+    "notFound": "+992 {phone} raqami bo‘yicha yozuv topilmadi.",
+    "records": "Yozuvlar",
+    "weight": "Og‘irlik",
+    "amount": "Summa",
+    "toPay": "To‘lovga",
+    "history": "Tarix",
+    "paid": "To‘langan",
+    "unpaid": "To‘lanmagan",
+    "noItems": "Yozuvlar yo‘q",
+    "viewOnly": "Faqat ko‘rish. To‘lov holatini faqat xodimlar o‘zgartirishi mumkin.",
+    "kg": "kg"
+  }
+}

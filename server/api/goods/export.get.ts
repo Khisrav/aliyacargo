@@ -17,6 +17,7 @@ export default defineEventHandler(async (event) => {
     let builder = supabase
       .from('goods')
       .select(GOODS_SELECT)
+      .is('deleted_at', null)
       .order('created_at', { ascending: true })
       .range(from, from + PAGE_SIZE - 1)
 
@@ -34,7 +35,9 @@ export default defineEventHandler(async (event) => {
       throw createError({ statusCode: 500, statusMessage: error.message })
     }
 
-    rows.push(...(data ?? []).map(mapGoodRow))
+    rows.push(...(data ?? [])
+      .filter((row: any) => !row.customers?.deleted_at)
+      .map(mapGoodRow))
 
     if (!data || data.length < PAGE_SIZE) {
       break

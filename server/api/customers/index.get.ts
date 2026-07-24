@@ -32,6 +32,7 @@ export default defineEventHandler(async (event) => {
   let customerQuery = supabase
     .from('customers')
     .select('id, phone, name, created_at')
+    .is('deleted_at', null)
     .limit(1000)
 
   if (search) {
@@ -60,6 +61,7 @@ export default defineEventHandler(async (event) => {
     .from('goods')
     .select('customer_id, weight, price, has_paid, created_at')
     .in('customer_id', ids)
+    .is('deleted_at', null)
 
   if (goodsError) {
     throw createError({ statusCode: 500, statusMessage: goodsError.message })

@@ -7,6 +7,7 @@ export interface Customer {
   name: string
   created_at: string
   updated_at: string
+  deleted_at?: string | null
 }
 
 export interface CustomerGood {
@@ -18,6 +19,7 @@ export interface CustomerGood {
   initiator: string | null
   created_by: string | null
   created_at: string
+  deleted_at?: string | null
   name: string
   phone: string
 }
@@ -48,8 +50,9 @@ export function mapGoodRow(row: Record<string, any>): CustomerGood {
     initiator: row.initiator ?? null,
     created_by: row.created_by ?? null,
     created_at: row.created_at,
-    name: customer.name ?? '',
-    phone: customer.phone ?? '',
+    deleted_at: row.deleted_at ?? null,
+    name: customer.name ?? row.name ?? '',
+    phone: customer.phone ?? row.phone ?? '',
   }
 }
 
@@ -62,9 +65,11 @@ export const GOODS_SELECT = `
   initiator,
   created_by,
   created_at,
+  deleted_at,
   customers (
     id,
     phone,
-    name
+    name,
+    deleted_at
   )
 `

@@ -117,6 +117,59 @@ async function togglePaid(item: CustomerGood) {
   }
 }
 
+function showToast(type: 'success' | 'error', message: string) {
+  toast.value = { type, message }
+  haptic(type)
+  setTimeout(() => { toast.value = null }, 2500)
+}
+
+async function removeGood(item: CustomerGood) {
+  if (!confirm(`Удалить запись ${formatWeight(item.weight)} в корзину?`)) return
+  try {
+    await apiFetch(`/api/trash/goods/${item.id}`, { method: 'DELETE' })
+    if (!profile.value) return
+    profile.value.goods = profile.value.goods.filter(g => g.id !== item.id)
+    const goods = profile.value.goods
+    const paidRows = goods.filter(g => g.has_paid)
+    const unpaidRows = goods.filter(g => !g.has_paid)
+    profile.value.stats = {
+      ...profile.value.stats,
+      totalCount: goods.length,
+      totalWeight: goods.reduce((s, g) => s + g.weight, 0),
+      totalRevenue: goods.reduce((s, g) => s + g.price, 0),
+      paidCount: paidRows.length,
+      unpaidCount: unpaidRows.length,
+      paidRevenue: paidRows.reduce((s, g) => s + g.price, 0),
+      unpaidRevenue: unpaidRows.reduce((s, g) => s + g.price, 0),
+      paidWeight: paidRows.reduce((s, g) => s + g.weight, 0),
+      unpaidWeight: unpaidRows.reduce((s, g) => s + g.weight, 0),
+      avgWeight: goods.length ? goods.reduce((s, g) => s + g.weight, 0) / goods.length : 0,
+      avgPrice: goods.length ? goods.reduce((s, g) => s + g.price, 0) / goods.length : 0,
+      paidRate: goods.length ? (paidRows.length / goods.length) * 100 : 0,
+      firstAt: goods.length ? goods[goods.length - 1]!.created_at : null,
+      lastAt: goods.length ? goods[0]!.created_at : null,
+    }
+    showToast('success', 'Перемещено в корзину')
+  }
+  catch (e) {
+    showToast('error', e instanceof Error ? e.message : 'Не удалось удалить')
+  }
+}
+
+async function removeCustomer() {
+  if (!profile.value) return
+  const name = profile.value.customer.name
+  if (!confirm(`Удалить клиента «${name}» и все его записи в корзину?`)) return
+  try {
+    await apiFetch(`/api/trash/customers/${profile.value.customer.id}`, { method: 'DELETE' })
+    showToast('success', 'Клиент перемещён в корзину')
+    await navigateTo('/clients')
+  }
+  catch (e) {
+    showToast('error', e instanceof Error ? e.message : 'Не удалось удалить')
+  }
+}
+
 function formatPrice(n: number) {
   return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'TJS', maximumFractionDigits: 0 }).format(n)
 }
@@ -180,6 +233,9 @@ function formatDate(iso: string | null) {
         <h2 class="client-name">{{ profile.customer.name }}</h2>
         <p class="client-phone">+992 {{ formatPhone(profile.customer.phone) }}</p>
         <p class="muted">Клиент с {{ formatDate(profile.customer.created_at) }}</p>
+        <button class="delete-client-btn" @click="removeCustomer">
+          Удалить клиента
+        </button>
       </section>
 
       <section class="cards-grid">
@@ -262,13 +318,18 @@ function formatDate(iso: string | null) {
                 Оплату отметил: {{ item.initiator }}
               </span>
             </div>
-            <button
-              class="paid-btn"
-              :class="{ paid: item.has_paid }"
-              @click="togglePaid(item)"
-            >
-              {{ item.has_paid ? '✓ Оплачено' : 'Не оплачено' }}
-            </button>
+            <div class="goods-actions">
+              <button
+                class="paid-btn"
+                :class="{ paid: item.has_paid }"
+                @click="togglePaid(item)"
+              >
+                {{ item.has_paid ? '✓ Оплачено' : 'Не оплачено' }}
+              </button>
+              <button class="trash-btn" aria-label="Удалить" @click="removeGood(item)">
+                ×
+              </button>
+            </div>
           </li>
         </ul>
 
@@ -503,6 +564,36 @@ function formatDate(iso: string | null) {
 .paid-btn.paid {
   background: #dcfce7;
   color: #15803d;
+}
+
+.goods-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.trash-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: #fef2f2;
+  color: #b91c1c;
+  font-size: 22px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.delete-client-btn {
+  margin-top: 12px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: #fef2f2;
+  color: #b91c1c;
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .screen {

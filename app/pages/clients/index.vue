@@ -90,6 +90,27 @@ function clearFilters() {
   sort.value = 'name'
 }
 
+const toast = ref<{ type: 'success' | 'error', message: string } | null>(null)
+
+function showToast(type: 'success' | 'error', message: string) {
+  toast.value = { type, message }
+  setTimeout(() => { toast.value = null }, 2500)
+}
+
+async function removeCustomer(customer: CustomerListItem, event: Event) {
+  event.preventDefault()
+  event.stopPropagation()
+  if (!confirm(`Удалить клиента «${customer.name}» и все его записи в корзину?`)) return
+  try {
+    await apiFetch(`/api/trash/customers/${customer.id}`, { method: 'DELETE' })
+    customers.value = customers.value.filter(c => c.id !== customer.id)
+    showToast('success', 'Клиент перемещён в корзину')
+  }
+  catch (e) {
+    showToast('error', e instanceof Error ? e.message : 'Не удалось удалить')
+  }
+}
+
 function formatPrice(n: number) {
   return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'TJS', maximumFractionDigits: 0 }).format(n)
 }
@@ -208,7 +229,7 @@ function formatDate(iso: string | null) {
         </p>
 
         <ul v-if="customers.length" class="clients-list">
-          <li v-for="customer in customers" :key="customer.id">
+          <li v-for="customer in customers" :key="customer.id" class="client-row">
             <NuxtLink :to="`/clients/${customer.id}`" class="client-card">
               <div class="client-main">
                 <span class="client-name">{{ customer.name }}</span>
@@ -226,6 +247,13 @@ function formatDate(iso: string | null) {
               </div>
               <span class="arrow">›</span>
             </NuxtLink>
+            <button
+              class="trash-btn"
+              aria-label="Удалить клиента"
+              @click="removeCustomer(customer, $event)"
+            >
+              ×
+            </button>
           </li>
         </ul>
 
@@ -234,6 +262,12 @@ function formatDate(iso: string | null) {
         </p>
       </template>
     </main>
+
+    <Transition name="toast">
+      <div v-if="toast" class="toast" :class="toast.type">
+        {{ toast.message }}
+      </div>
+    </Transition>
   </div>
 </template>
 
@@ -379,12 +413,16 @@ function formatDate(iso: string | null) {
   gap: 8px;
 }
 
+.client-row {
+  position: relative;
+}
+
 .client-card {
   position: relative;
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 14px 36px 14px 16px;
+  padding: 14px 72px 14px 16px;
   border-radius: 14px;
   background: var(--tg-theme-secondary-bg-color, #fff);
   color: inherit;
@@ -439,6 +477,57 @@ function formatDate(iso: string | null) {
   transform: translateY(-50%);
   font-size: 22px;
   color: var(--tg-theme-hint-color, #aaa);
+}
+
+.trash-btn {
+  position: absolute;
+  right: 40px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 1;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: #fef2f2;
+  color: #b91c1c;
+  font-size: 22px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.toast {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  z-index: 50;
+  padding: 12px 16px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+  color: #fff;
+}
+
+.toast.success {
+  background: #15803d;
+}
+
+.toast.error {
+  background: #b91c1c;
+}
+
+.toast-enter-active,
+.toast-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.toast-enter-from,
+.toast-leave-to {
+  opacity: 0;
+  transform: translateY(8px);
 }
 
 .screen {

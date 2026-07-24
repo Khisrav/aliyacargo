@@ -6,6 +6,7 @@ const links = [
   { to: '/', label: 'Взвешивание', icon: '⚖️' },
   { to: '/goods', label: 'Записи', icon: '📦' },
   { to: '/clients', label: 'Клиенты', icon: '👥' },
+  { to: '/trash', label: 'Корзина', icon: '🗑️' },
   { to: '/stats', label: 'Статистика', icon: '📊' },
 ]
 

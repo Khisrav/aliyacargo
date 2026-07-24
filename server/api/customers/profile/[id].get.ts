@@ -16,6 +16,7 @@ export default defineEventHandler(async (event) => {
     .from('customers')
     .select('id, phone, name, created_at, updated_at')
     .eq('id', id)
+    .is('deleted_at', null)
     .maybeSingle()
 
   if (customerError) {
@@ -30,6 +31,7 @@ export default defineEventHandler(async (event) => {
     .from('goods')
     .select(GOODS_SELECT)
     .eq('customer_id', id)
+    .is('deleted_at', null)
     .order('created_at', { ascending: false })
     .limit(1000)
 
