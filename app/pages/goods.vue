@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { CustomerGood } from '~/composables/useTelegram'
-import { formatPhone } from '#shared/utils/phone'
+import { formatPhone, normalizePhone } from '#shared/utils/phone'
 
 const { initData, ready, haptic } = useTelegram()
 const { apiFetch } = useApi(initData)
@@ -82,10 +82,14 @@ function buildExportQuery() {
   return qs ? `/api/goods/export?${qs}` : '/api/goods/export'
 }
 
+function phoneTail(phone: string) {
+  return normalizePhone(phone).slice(-4)
+}
+
 function formatExportRows(rows: CustomerGood[]) {
   return rows
     .map((item, index) => {
-      return `${index + 1}. ${item.name} — ${formatPhone(item.phone)} — ${item.weight} кг — ${item.price} с.`
+      return `${index + 1}. ${item.name} — ${phoneTail(item.phone)} — ${item.weight} кг — ${item.price} с.`
     })
     .join('\n')
 }
