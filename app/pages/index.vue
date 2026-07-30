@@ -109,6 +109,7 @@ function onWeightInput(e: Event) {
   let val = input.value.replace(',', '.').replace(/[^\d.]/g, '')
   const parts = val.split('.')
   if (parts.length > 2) val = `${parts[0]}.${parts.slice(1).join('')}`
+  if (val.startsWith('0') && !val.includes('.')) val = `0.${val.slice(1)}`
   weight.value = val
   input.value = val
 }
