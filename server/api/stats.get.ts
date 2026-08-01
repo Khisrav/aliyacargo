@@ -1,15 +1,11 @@
-import { createError } from 'h3'
+import { createError, getQuery } from 'h3'
 import { requireTelegramAuth } from '../utils/auth'
 import { GOODS_SELECT, mapGoodRow, useSupabaseAdmin } from '../utils/supabase'
 
+type Period = 'today' | 'yesterday' | 'week' | 'month' | 'all'
+
 interface DayBucket {
   date: string
-  count: number
-  weight: number
-  revenue: number
-}
-
-interface PeriodStats {
   count: number
   weight: number
   revenue: number
@@ -25,20 +21,29 @@ interface TopCustomer {
   unpaidRevenue: number
 }
 
-function emptyPeriod(): PeriodStats {
-  return { count: 0, weight: 0, revenue: 0 }
-}
+const PERIODS = new Set<Period>(['today', 'yesterday', 'week', 'month', 'all'])
 
 function dateKey(d: Date) {
   return d.toISOString().slice(0, 10)
 }
 
-function startOfWeek(d: Date) {
+function startOfDay(d: Date) {
   const result = new Date(d)
+  result.setUTCHours(0, 0, 0, 0)
+  return result
+}
+
+function endOfDay(d: Date) {
+  const result = new Date(d)
+  result.setUTCHours(23, 59, 59, 999)
+  return result
+}
+
+function startOfWeek(d: Date) {
+  const result = startOfDay(d)
   const day = result.getUTCDay()
   const diff = day === 0 ? 6 : day - 1
   result.setUTCDate(result.getUTCDate() - diff)
-  result.setUTCHours(0, 0, 0, 0)
   return result
 }
 
@@ -46,52 +51,87 @@ function startOfMonth(d: Date) {
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1))
 }
 
-function accumulate(period: PeriodStats, weight: number, price: number) {
-  period.count += 1
-  period.weight += weight
-  period.revenue += price
+function resolvePeriod(period: Period): { from: Date | null, to: Date | null } {
+  const now = new Date()
+
+  switch (period) {
+    case 'today':
+      return { from: startOfDay(now), to: endOfDay(now) }
+    case 'yesterday': {
+      const day = startOfDay(now)
+      day.setUTCDate(day.getUTCDate() - 1)
+      return { from: day, to: endOfDay(day) }
+    }
+    case 'week':
+      return { from: startOfWeek(now), to: endOfDay(now) }
+    case 'month':
+      return { from: startOfMonth(now), to: endOfDay(now) }
+    case 'all':
+    default:
+      return { from: null, to: null }
+  }
+}
+
+function buildDailyBuckets(from: Date, to: Date): DayBucket[] {
+  const buckets: DayBucket[] = []
+  const cursor = startOfDay(from)
+  const end = startOfDay(to)
+
+  while (cursor <= end) {
+    buckets.push({ date: dateKey(cursor), count: 0, weight: 0, revenue: 0 })
+    cursor.setUTCDate(cursor.getUTCDate() + 1)
+  }
+
+  return buckets
 }
 
 export default defineEventHandler(async (event) => {
   requireTelegramAuth(event)
 
+  const query = getQuery(event)
+  const rawPeriod = typeof query.period === 'string' ? query.period : 'all'
+  const period: Period = PERIODS.has(rawPeriod as Period) ? (rawPeriod as Period) : 'all'
+  const { from, to } = resolvePeriod(period)
+
   const supabase = useSupabaseAdmin()
-  const [{ data, error }, customersRes] = await Promise.all([
-    supabase
-      .from('goods')
-      .select(GOODS_SELECT)
-      .is('deleted_at', null)
-      .order('created_at', { ascending: false })
-      .limit(5000),
-    supabase
-      .from('customers')
-      .select('id', { count: 'exact', head: true })
-      .is('deleted_at', null),
-  ])
+  let goodsQuery = supabase
+    .from('goods')
+    .select(GOODS_SELECT)
+    .is('deleted_at', null)
+    .order('created_at', { ascending: false })
+    .limit(5000)
+
+  if (from) {
+    goodsQuery = goodsQuery.gte('created_at', from.toISOString())
+  }
+  if (to) {
+    goodsQuery = goodsQuery.lte('created_at', to.toISOString())
+  }
+
+  const { data, error } = await goodsQuery
 
   if (error) {
     throw createError({ statusCode: 500, statusMessage: error.message })
   }
 
-  if (customersRes.error) {
-    throw createError({ statusCode: 500, statusMessage: customersRes.error.message })
-  }
-
   const rows = (data ?? [])
     .filter((row: any) => !row.customers?.deleted_at)
     .map(mapGoodRow)
+
   const now = new Date()
-  const todayKey = dateKey(now)
-  const yesterday = new Date(now)
-  yesterday.setUTCDate(yesterday.getUTCDate() - 1)
-  const yesterdayKey = dateKey(yesterday)
-  const weekStart = startOfWeek(now)
-  const monthStart = startOfMonth(now)
+  const chartFrom = from ?? (() => {
+    const d = startOfDay(now)
+    d.setUTCDate(d.getUTCDate() - 13)
+    return d
+  })()
+  const chartTo = to ?? endOfDay(now)
+
+  const buckets = buildDailyBuckets(chartFrom, chartTo)
+  const bucketByDate = new Map(buckets.map(b => [b.date, b]))
 
   const totalCount = rows.length
   const totalWeight = rows.reduce((sum, r) => sum + r.weight, 0)
   const totalRevenue = rows.reduce((sum, r) => sum + r.price, 0)
-  const customersCount = customersRes.count ?? 0
 
   const paidRows = rows.filter(r => r.has_paid)
   const unpaidRows = rows.filter(r => !r.has_paid)
@@ -112,20 +152,6 @@ export default defineEventHandler(async (event) => {
   const maxWeight = weights.length ? Math.max(...weights) : 0
   const minWeight = weights.length ? Math.min(...weights) : 0
 
-  const today = emptyPeriod()
-  const yesterdayStats = emptyPeriod()
-  const week = emptyPeriod()
-  const month = emptyPeriod()
-
-  const days = 7
-  const buckets: DayBucket[] = []
-  for (let i = days - 1; i >= 0; i--) {
-    const d = new Date(now)
-    d.setUTCDate(d.getUTCDate() - i)
-    buckets.push({ date: dateKey(d), count: 0, weight: 0, revenue: 0 })
-  }
-  const bucketByDate = new Map(buckets.map(b => [b.date, b]))
-
   const customers = new Map<string, TopCustomer>()
   const debtors = new Map<string, TopCustomer>()
 
@@ -141,11 +167,6 @@ export default defineEventHandler(async (event) => {
       bucket.weight += weight
       bucket.revenue += price
     }
-
-    if (key === todayKey) accumulate(today, weight, price)
-    if (key === yesterdayKey) accumulate(yesterdayStats, weight, price)
-    if (created >= weekStart) accumulate(week, weight, price)
-    if (created >= monthStart) accumulate(month, weight, price)
 
     const customerKey = row.phone || String(row.customer_id)
     const existing = customers.get(customerKey)
@@ -201,14 +222,15 @@ export default defineEventHandler(async (event) => {
     .sort((a, b) => b.unpaidRevenue - a.unpaidRevenue)
     .slice(0, 15)
 
-  const customersWithDebt = debtors.size
-
   return {
+    period,
+    periodFrom: from ? dateKey(from) : null,
+    periodTo: to ? dateKey(to) : null,
     totalCount,
     totalWeight,
     totalRevenue,
-    customersCount,
-    customersWithDebt,
+    customersCount: customers.size,
+    customersWithDebt: debtors.size,
     paidCount,
     unpaidCount,
     paidRevenue,
@@ -221,10 +243,6 @@ export default defineEventHandler(async (event) => {
     paidRate,
     maxWeight,
     minWeight,
-    today,
-    yesterday: yesterdayStats,
-    week,
-    month,
     topCustomers,
     leftovers,
     daily: buckets,

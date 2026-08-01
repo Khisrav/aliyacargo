@@ -1,14 +1,10 @@
 <script setup lang="ts">
 import { formatPhone } from '#shared/utils/phone'
 
+type Period = 'today' | 'yesterday' | 'week' | 'month' | 'all'
+
 interface DayBucket {
   date: string
-  count: number
-  weight: number
-  revenue: number
-}
-
-interface PeriodStats {
   count: number
   weight: number
   revenue: number
@@ -25,6 +21,9 @@ interface TopCustomer {
 }
 
 interface StatsResponse {
+  period: Period
+  periodFrom: string | null
+  periodTo: string | null
   totalCount: number
   totalWeight: number
   totalRevenue: number
@@ -42,14 +41,18 @@ interface StatsResponse {
   paidRate: number
   maxWeight: number
   minWeight: number
-  today: PeriodStats
-  yesterday: PeriodStats
-  week: PeriodStats
-  month: PeriodStats
   topCustomers: TopCustomer[]
   leftovers: TopCustomer[]
   daily: DayBucket[]
 }
+
+const PERIOD_OPTIONS: { value: Period, label: string }[] = [
+  { value: 'today', label: 'Сегодня' },
+  { value: 'yesterday', label: 'Вчера' },
+  { value: 'week', label: 'Неделя' },
+  { value: 'month', label: 'Месяц' },
+  { value: 'all', label: 'Всё время' },
+]
 
 const { initData, ready } = useTelegram()
 const { apiFetch } = useApi(initData)
@@ -58,10 +61,31 @@ const { requireWorker } = useWorkerGate()
 const state = ref<'loading' | 'ok' | 'error'>('loading')
 const errorMessage = ref('')
 const stats = ref<StatsResponse | null>(null)
+const period = ref<Period>('month')
 
 const maxDailyRevenue = computed(() => {
   if (!stats.value) return 0
   return Math.max(1, ...stats.value.daily.map(d => d.revenue))
+})
+
+const chartTitle = computed(() => {
+  switch (period.value) {
+    case 'today':
+      return 'Сегодня'
+    case 'yesterday':
+      return 'Вчера'
+    case 'week':
+      return 'Эта неделя'
+    case 'month':
+      return 'Этот месяц'
+    case 'all':
+      return 'Последние 14 дней'
+  }
+})
+
+const chartEmptyText = computed(() => {
+  if (period.value === 'all') return 'За последние 14 дней записей нет'
+  return 'За выбранный период записей нет'
 })
 
 watch(ready, async () => {
@@ -70,18 +94,28 @@ watch(ready, async () => {
   await load()
 }, { immediate: true })
 
+watch(period, () => {
+  if (ready.value) load()
+})
+
 async function load() {
   if (!ready.value) return
 
   state.value = 'loading'
   try {
-    stats.value = await apiFetch<StatsResponse>('/api/stats')
+    const params = new URLSearchParams({ period: period.value })
+    stats.value = await apiFetch<StatsResponse>(`/api/stats?${params}`)
     state.value = 'ok'
   }
   catch (e) {
     state.value = 'error'
     errorMessage.value = e instanceof Error ? e.message : 'Не удалось загрузить статистику'
   }
+}
+
+function selectPeriod(value: Period) {
+  if (period.value === value) return
+  period.value = value
 }
 
 function formatPrice(n: number) {
@@ -105,14 +139,32 @@ function barHeight(revenue: number) {
   const pct = Math.max(4, Math.round((revenue / maxDailyRevenue.value) * 100))
   return `${pct}%`
 }
-
-function periodLabel(period: PeriodStats) {
-  return `${period.count} · ${formatWeight(period.weight)} · ${formatPrice(period.revenue)}`
-}
 </script>
 
 <template>
   <div class="stats-page">
+    <header class="header">
+      <h1>Статистика</h1>
+      <button class="refresh-btn" aria-label="Обновить" :disabled="state === 'loading'" @click="load">
+        ↻
+      </button>
+    </header>
+
+    <div class="period-bar" role="tablist" aria-label="Период">
+      <button
+        v-for="option in PERIOD_OPTIONS"
+        :key="option.value"
+        type="button"
+        role="tab"
+        class="period-chip"
+        :class="{ active: period === option.value }"
+        :aria-selected="period === option.value"
+        @click="selectPeriod(option.value)"
+      >
+        {{ option.label }}
+      </button>
+    </div>
+
     <div v-if="state === 'loading'" class="screen center">
       <div class="spinner" />
       <p class="muted">Загрузка…</p>
@@ -128,13 +180,6 @@ function periodLabel(period: PeriodStats) {
     </div>
 
     <template v-else-if="stats">
-      <header class="header">
-        <h1>Статистика</h1>
-        <button class="refresh-btn" aria-label="Обновить" @click="load">
-          ↻
-        </button>
-      </header>
-
       <main class="main">
         <section class="cards-grid">
           <div class="stat-card">
@@ -183,28 +228,6 @@ function periodLabel(period: PeriodStats) {
             </div>
           </div>
           <p v-else class="muted empty-daily">Неоплаченных остатков нет</p>
-        </section>
-
-        <section class="card">
-          <h2 class="section-title">Периоды</h2>
-          <div class="period-list">
-            <div class="period-row">
-              <span class="period-name">Сегодня</span>
-              <span class="period-value">{{ periodLabel(stats.today) }}</span>
-            </div>
-            <div class="period-row">
-              <span class="period-name">Вчера</span>
-              <span class="period-value">{{ periodLabel(stats.yesterday) }}</span>
-            </div>
-            <div class="period-row">
-              <span class="period-name">Эта неделя</span>
-              <span class="period-value">{{ periodLabel(stats.week) }}</span>
-            </div>
-            <div class="period-row">
-              <span class="period-name">Этот месяц</span>
-              <span class="period-value">{{ periodLabel(stats.month) }}</span>
-            </div>
-          </div>
         </section>
 
         <section class="card">
@@ -260,8 +283,8 @@ function periodLabel(period: PeriodStats) {
         </section>
 
         <section class="card chart-card">
-          <h2 class="section-title">Последние 14 дней</h2>
-          <div class="chart">
+          <h2 class="section-title">{{ chartTitle }}</h2>
+          <div class="chart" :class="{ dense: stats.daily.length > 14 }">
             <div v-for="day in stats.daily" :key="day.date" class="chart-col">
               <div class="chart-bar-wrap">
                 <div
@@ -280,7 +303,7 @@ function periodLabel(period: PeriodStats) {
               <span>{{ day.count }} шт · {{ formatWeight(day.weight) }} · {{ formatPrice(day.revenue) }}</span>
             </div>
             <p v-if="!stats.daily.some(d => d.count > 0)" class="muted empty-daily">
-              За последние 14 дней записей нет
+              {{ chartEmptyText }}
             </p>
           </div>
         </section>
@@ -313,7 +336,7 @@ function periodLabel(period: PeriodStats) {
 }
 
 .screen {
-  min-height: 60dvh;
+  min-height: 50dvh;
   padding: 24px;
 }
 
@@ -361,6 +384,39 @@ function periodLabel(period: PeriodStats) {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.refresh-btn:disabled {
+  opacity: 0.6;
+}
+
+.period-bar {
+  display: flex;
+  gap: 8px;
+  padding: 4px 16px 16px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.period-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.period-chip {
+  flex-shrink: 0;
+  padding: 8px 14px;
+  border-radius: 12px;
+  background: var(--tg-theme-secondary-bg-color, #eee);
+  color: var(--tg-theme-text-color, #333);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.period-chip.active {
+  background: var(--tg-theme-button-color, #3390ec);
+  color: var(--tg-theme-button-text-color, #fff);
 }
 
 .main {
@@ -436,7 +492,6 @@ function periodLabel(period: PeriodStats) {
   background: #fef2f2;
 }
 
-.period-list,
 .top-list,
 .daily-summary {
   display: flex;
@@ -444,7 +499,6 @@ function periodLabel(period: PeriodStats) {
   gap: 10px;
 }
 
-.period-row,
 .daily-row,
 .top-row {
   display: flex;
@@ -452,20 +506,17 @@ function periodLabel(period: PeriodStats) {
   gap: 10px;
 }
 
-.period-row,
 .daily-row {
   justify-content: space-between;
   gap: 12px;
 }
 
-.period-name,
 .daily-row span:first-child {
   font-size: 14px;
   font-weight: 600;
   flex-shrink: 0;
 }
 
-.period-value,
 .daily-row span:last-child {
   font-size: 12px;
   color: var(--tg-theme-hint-color, #666);
@@ -571,6 +622,17 @@ function periodLabel(period: PeriodStats) {
   margin-bottom: 14px;
 }
 
+.chart.dense {
+  gap: 2px;
+}
+
+.chart.dense .chart-label {
+  font-size: 8px;
+  transform: rotate(-45deg);
+  transform-origin: center top;
+  margin-top: 4px;
+}
+
 .chart-col {
   flex: 1;
   display: flex;
@@ -578,6 +640,7 @@ function periodLabel(period: PeriodStats) {
   align-items: center;
   gap: 6px;
   height: 100%;
+  min-width: 0;
 }
 
 .chart-bar-wrap {
