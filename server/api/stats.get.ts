@@ -12,6 +12,7 @@ interface DayBucket {
 }
 
 interface TopCustomer {
+  id: number
   name: string
   phone: string
   count: number
@@ -223,6 +224,7 @@ export default defineEventHandler(async (event) => {
     }
     else {
       customers.set(customerKey, {
+        id: row.customer_id,
         name: row.name || 'Без имени',
         phone: row.phone,
         count: 1,
@@ -244,6 +246,7 @@ export default defineEventHandler(async (event) => {
       }
       else {
         debtors.set(customerKey, {
+          id: row.customer_id,
           name: row.name || 'Без имени',
           phone: row.phone,
           count: 1,

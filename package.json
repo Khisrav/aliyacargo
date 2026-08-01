@@ -11,6 +11,7 @@
     "bot": "node --env-file=.env --import tsx bot/index.ts"
   },
   "dependencies": {
+    "@fontsource-variable/plus-jakarta-sans": "^5.3.0",
     "@grammyjs/validator": "^1.0.1",
     "@nuxtjs/i18n": "^10.5.0",
     "@supabase/supabase-js": "^2.110.2",
@@ -20,6 +21,7 @@
     "vue-router": "^5.1.0"
   },
   "devDependencies": {
+    "@nuxtjs/tailwindcss": "^6.14.0",
     "tsx": "^4.23.0"
   }
 }

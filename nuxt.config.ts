@@ -4,11 +4,20 @@ export default defineNuxtConfig({
   devtools: { enabled: true },
   css: ['~/assets/css/main.css'],
 
+  modules: ['@nuxtjs/tailwindcss', '@nuxtjs/i18n'],
+
+  tailwindcss: {
+    cssPath: '~/assets/css/main.css',
+    configPath: 'tailwind.config.ts',
+  },
+
   app: {
     head: {
+      title: 'Aliya Cargo',
       script: [{ src: 'https://telegram.org/js/telegram-web-app.js' }],
       meta: [
-        { name: 'viewport', content: 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no' },
+        { name: 'viewport', content: 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover' },
+        { name: 'theme-color', content: '#0F766E' },
       ],
     },
   },
@@ -30,8 +39,6 @@ export default defineNuxtConfig({
       appUrl: process.env.NUXT_PUBLIC_APP_URL || '',
     },
   },
-
-  modules: ['@nuxtjs/i18n'],
 
   i18n: {
     defaultLocale: 'ru',

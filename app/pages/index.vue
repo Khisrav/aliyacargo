@@ -5,6 +5,8 @@ import { formatPhone, isValidPhone, normalizePhone } from '#shared/utils/phone'
 const { initData, ready, haptic } = useTelegram()
 const { apiFetch } = useApi(initData)
 const { requireWorker } = useWorkerGate()
+const { confirm } = useConfirm()
+const { formatPrice, formatWeight, formatDateTime } = useFormatters()
 
 const authState = ref<'loading' | 'ok' | 'denied' | 'error'>('loading')
 const authError = ref('')
@@ -21,7 +23,7 @@ const submitting = ref(false)
 const toast = ref<{ type: 'success' | 'error', message: string } | null>(null)
 const sessionGoods = ref<CustomerGood[]>([])
 
-const phoneRef = ref<HTMLInputElement>()
+const phoneField = ref<{ focus: () => void } | null>(null)
 const nameRef = ref<HTMLInputElement>()
 const weightRef = ref<HTMLInputElement>()
 
@@ -54,7 +56,7 @@ async function checkAuth() {
     pricePerKg.value = res.pricePerKg
     userName.value = res.user.first_name
     authState.value = 'ok'
-    nextTick(() => phoneRef.value?.focus())
+    nextTick(() => phoneField.value?.focus())
   }
   catch (e) {
     authState.value = 'denied'
@@ -71,7 +73,7 @@ async function lookupCustomer() {
     const customer = await apiFetch<{ id: number, name: string, phone: string } | null>(
       `/api/customers/${phoneDigits.value}`,
     )
- 
+
     if (token !== phoneLookupToken) return
 
     if (customer?.name) {
@@ -125,7 +127,7 @@ function resetForm() {
   name.value = ''
   weight.value = ''
   nameLocked.value = false
-  nextTick(() => phoneRef.value?.focus())
+  nextTick(() => phoneField.value?.focus())
 }
 
 async function submit() {
@@ -169,7 +171,13 @@ async function togglePaid(item: CustomerGood) {
 }
 
 async function removeGood(item: CustomerGood) {
-  if (!confirm(`Удалить запись «${item.name}» в корзину?`)) return
+  const ok = await confirm({
+    title: 'Удалить запись?',
+    message: `«${item.name}» будет перемещена в корзину.`,
+    confirmLabel: 'В корзину',
+    danger: true,
+  })
+  if (!ok) return
   try {
     await apiFetch(`/api/trash/goods/${item.id}`, { method: 'DELETE' })
     sessionGoods.value = sessionGoods.value.filter(g => g.id !== item.id)
@@ -178,24 +186,6 @@ async function removeGood(item: CustomerGood) {
   catch (e) {
     showToast('error', e instanceof Error ? e.message : 'Не удалось удалить')
   }
-}
-
-function formatPrice(n: number) {
-  return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'TJS', maximumFractionDigits: 0 }).format(n)
-}
-
-function formatWeight(n: number) {
-  return `${n} кг`
-}
-
-function formatDateTime(iso: string) {
-  return new Date(iso).toLocaleString('ru-RU', {
-    day: '2-digit',
-    month: '2-digit',
-    year: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
 }
 
 function onPhoneEnter() {
@@ -214,55 +204,45 @@ function onWeightEnter() {
 </script>
 
 <template>
-  <div class="app">
-    <div v-if="authState === 'loading'" class="screen center">
-      <div class="spinner" />
-      <p class="muted">Загрузка…</p>
-    </div>
+  <div>
+    <UiSpinner v-if="authState === 'loading'" />
 
-    <div v-else-if="authState === 'denied'" class="screen center">
-      <div class="icon-block">🔒</div>
-      <h1>Доступ запрещён</h1>
-      <p class="muted">{{ authError }}</p>
+    <div v-else-if="authState === 'denied'" class="flex min-h-[60dvh] flex-col items-center justify-center gap-3 px-6 text-center">
+      <div class="flex h-14 w-14 items-center justify-center rounded-3xl bg-danger-soft text-danger">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+          <rect x="4" y="10" width="16" height="10" rx="2" />
+          <path d="M8 10V7a4 4 0 0 1 8 0v3" />
+        </svg>
+      </div>
+      <h1 class="text-xl font-extrabold text-ink">Доступ запрещён</h1>
+      <p class="max-w-xs text-sm text-muted">{{ authError }}</p>
     </div>
 
     <template v-else>
-      <header class="header">
-        <div>
-          <h1>Взвешивание</h1>
-          <p v-if="userName" class="greeting">Привет, {{ userName }}</p>
-        </div>
-        <NuxtLink to="/goods" class="link-btn">
-          Все записи
-        </NuxtLink>
-      </header>
+      <PageHeader :title="'Взвешивание'" :subtitle="userName ? `Привет, ${userName}` : undefined">
+        <template #actions>
+          <NuxtLink to="/goods" class="ui-chip text-brand">
+            Все записи
+          </NuxtLink>
+        </template>
+      </PageHeader>
 
-      <main class="main">
-        <section class="card form-card">
-          <label class="field">
-            <span class="label">Телефон <span class="hint">без +992</span></span>
-            <div class="phone-row">
-              <span class="phone-prefix">+992</span>
-              <input
-                ref="phoneRef"
-                :value="phone"
-                type="text"
-                inputmode="numeric"
-                autocomplete="off"
-                enterkeyhint="next"
-                placeholder="### ##-##-##"
-                class="phone-input"
-                @input="onPhoneInput"
-                @keydown.enter.prevent="onPhoneEnter"
-                @blur="lookupCustomer"
-              >
-            </div>
-            <span v-if="lookingUp" class="field-hint">Ищем клиента…</span>
-            <span v-else-if="nameLocked" class="field-hint ok">Клиент найден — имя подставлено</span>
-          </label>
+      <div class="animate-fade-up space-y-4 px-4 pb-32">
+        <section class="ui-card space-y-4 p-5">
+          <UiPhoneField
+            ref="phoneField"
+            :model-value="phone"
+            label="Телефон"
+            hint="без +992"
+            :looking-up="lookingUp"
+            :found="nameLocked"
+            @input="onPhoneInput"
+            @enter="onPhoneEnter"
+            @blur="lookupCustomer"
+          />
 
-          <label class="field">
-            <span class="label">Имя клиента</span>
+          <label class="ui-field">
+            <span class="ui-label">Имя клиента</span>
             <input
               ref="nameRef"
               v-model="name"
@@ -271,12 +251,13 @@ function onWeightEnter() {
               autocapitalize="words"
               enterkeyhint="next"
               placeholder="Полное имя"
+              class="ui-input"
               @keydown.enter.prevent="onNameEnter"
             >
           </label>
 
-          <label class="field">
-            <span class="label">Вес (кг)</span>
+          <label class="ui-field">
+            <span class="ui-label">Вес (кг)</span>
             <input
               ref="weightRef"
               :value="weight"
@@ -285,418 +266,59 @@ function onWeightEnter() {
               autocomplete="off"
               enterkeyhint="done"
               placeholder="0.0"
-              class="weight-input"
+              class="ui-input text-center text-[28px] font-extrabold tabular-nums"
               @input="onWeightInput"
               @keydown.enter.prevent="onWeightEnter"
             >
           </label>
 
-          <div class="price-row" :class="{ active: weightNum > 0 }">
-            <span class="price-label">Цена</span>
-            <span class="price-value">{{ formatPrice(calculatedPrice) }}</span>
-          </div>
-
-          <button
-            class="submit-btn"
-            :class="{ ready: canSubmit }"
-            :disabled="!canSubmit"
-            @click="submit"
+          <div
+            class="flex items-center justify-between rounded-[1.25rem] border border-brand/10 bg-gradient-to-r from-brand-soft/80 to-teal-50/60 px-4 py-3.5 transition"
+            :class="weightNum > 0 ? 'opacity-100' : 'opacity-45'"
           >
-            {{ submitting ? 'Сохранение…' : 'Сохранить и далее' }}
-          </button>
+            <span class="text-sm font-bold text-brand-dark/70">Цена</span>
+            <span class="text-xl font-extrabold tabular-nums text-brand-dark">{{ formatPrice(calculatedPrice) }}</span>
+          </div>
         </section>
 
-        <section v-if="sessionGoods.length" class="list-section">
-          <h2 class="section-title">
+        <section v-if="sessionGoods.length" class="space-y-2.5">
+          <h2 class="px-1 text-sm font-bold text-ink">
             В этой сессии
-            <span class="count">{{ sessionGoods.length }}</span>
+            <span class="font-medium text-muted">{{ sessionGoods.length }}</span>
           </h2>
-          <ul class="goods-list">
-            <li v-for="item in sessionGoods" :key="item.id" class="goods-item">
-              <div class="goods-info">
-                <span class="goods-name">{{ item.name }}</span>
-                <span class="goods-meta">
-                  <span class="badge">{{ formatPhone(item.phone) }}</span>
-                  {{ formatWeight(item.weight) }} · {{ formatPrice(item.price) }}
-                  · {{ formatDateTime(item.created_at) }}
-                </span>
-              </div>
-              <div class="goods-actions">
-                <button
-                  class="paid-btn"
-                  :class="{ paid: item.has_paid }"
-                  @click="togglePaid(item)"
-                >
-                  {{ item.has_paid ? '✓ Оплачено' : 'Не оплачено' }}
-                </button>
-                <button class="trash-btn" aria-label="Удалить" @click="removeGood(item)">
-                  ×
-                </button>
-              </div>
-            </li>
+          <ul class="space-y-2">
+            <GoodsRow
+              v-for="item in sessionGoods"
+              :key="item.id"
+              :name="item.name"
+              :phone="item.phone"
+              :meta="`${formatWeight(item.weight)} · ${formatPrice(item.price)} · ${formatDateTime(item.created_at)}`"
+              :has-paid="item.has_paid"
+              @toggle-paid="togglePaid(item)"
+              @remove="removeGood(item)"
+            />
           </ul>
         </section>
 
-        <p v-else class="empty muted">
-          Записей в этой сессии пока нет. Добавьте первую выше.
-        </p>
-      </main>
+        <UiEmpty v-else message="Записей в этой сессии пока нет. Добавьте первую выше." />
+      </div>
 
-      <Transition name="toast">
-        <div v-if="toast" class="toast" :class="toast.type">
-          {{ toast.message }}
-        </div>
-      </Transition>
+      <div
+        class="pointer-events-none fixed inset-x-0 z-40 px-4"
+        :style="{ bottom: 'calc(5.85rem + env(safe-area-inset-bottom, 0px))' }"
+      >
+        <button
+          type="button"
+          class="pointer-events-auto ui-btn-primary w-full"
+          :class="{ 'opacity-100': canSubmit, 'opacity-40': !canSubmit }"
+          :disabled="!canSubmit"
+          @click="submit"
+        >
+          {{ submitting ? 'Сохранение…' : 'Сохранить и далее' }}
+        </button>
+      </div>
+
+      <UiToast :toast="toast" />
     </template>
   </div>
 </template>
-
-<style scoped>
-.app {
-  min-height: 100dvh;
-  padding-bottom: env(safe-area-inset-bottom, 16px);
-}
-
-.screen {
-  min-height: 100dvh;
-  padding: 24px;
-}
-
-.center {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  text-align: center;
-}
-
-.icon-block {
-  font-size: 48px;
-}
-
-.header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 20px 20px 8px;
-}
-
-.header h1 {
-  font-size: 22px;
-  font-weight: 700;
-  letter-spacing: -0.3px;
-}
-
-.greeting {
-  font-size: 14px;
-  color: var(--tg-theme-hint-color, #888);
-  margin-top: 2px;
-}
-
-.link-btn {
-  flex-shrink: 0;
-  padding: 10px 12px;
-  border-radius: 12px;
-  background: var(--tg-theme-secondary-bg-color, #eee);
-  color: var(--tg-theme-button-color, #3390ec);
-  font-size: 13px;
-  font-weight: 700;
-  text-decoration: none;
-}
-
-.main {
-  padding: 0 16px 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-.card {
-  background: var(--tg-theme-secondary-bg-color, #fff);
-  border-radius: 16px;
-  padding: 20px;
-}
-
-.form-card {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.label {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--tg-theme-hint-color, #666);
-  text-transform: uppercase;
-  letter-spacing: 0.4px;
-}
-
-.hint {
-  font-weight: 400;
-  text-transform: none;
-  letter-spacing: 0;
-}
-
-.field-hint {
-  font-size: 12px;
-  color: var(--tg-theme-hint-color, #888);
-}
-
-.field-hint.ok {
-  color: #15803d;
-}
-
-.field input {
-  width: 100%;
-  padding: 14px 16px;
-  border-radius: 12px;
-  border: 2px solid transparent;
-  background: var(--tg-theme-bg-color, #f0f0f0);
-  color: var(--tg-theme-text-color, #111);
-  font-size: 18px;
-  transition: border-color 0.15s;
-}
-
-.field input:focus {
-  border-color: var(--tg-theme-button-color, #3390ec);
-}
-
-.phone-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.phone-prefix {
-  flex-shrink: 0;
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--tg-theme-hint-color, #666);
-}
-
-.phone-input {
-  font-size: 22px !important;
-  font-weight: 700;
-  letter-spacing: 1px;
-  font-variant-numeric: tabular-nums;
-}
-
-.weight-input {
-  font-size: 28px !important;
-  font-weight: 600;
-  text-align: center;
-  font-variant-numeric: tabular-nums;
-}
-
-.price-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 16px;
-  border-radius: 12px;
-  background: var(--tg-theme-bg-color, #f0f0f0);
-  opacity: 0.5;
-  transition: opacity 0.2s;
-}
-
-.price-row.active {
-  opacity: 1;
-}
-
-.price-label {
-  font-size: 14px;
-  color: var(--tg-theme-hint-color, #888);
-}
-
-.price-value {
-  font-size: 22px;
-  font-weight: 700;
-  color: var(--tg-theme-button-color, #3390ec);
-  font-variant-numeric: tabular-nums;
-}
-
-.submit-btn {
-  width: 100%;
-  padding: 16px;
-  border-radius: 14px;
-  font-size: 17px;
-  font-weight: 700;
-  background: var(--tg-theme-button-color, #3390ec);
-  color: var(--tg-theme-button-text-color, #fff);
-  opacity: 0.4;
-  transition: opacity 0.2s, transform 0.1s;
-}
-
-.submit-btn.ready {
-  opacity: 1;
-}
-
-.submit-btn.ready:active {
-  transform: scale(0.98);
-}
-
-.submit-btn:disabled {
-  cursor: not-allowed;
-}
-
-.section-title {
-  font-size: 15px;
-  font-weight: 600;
-  margin-bottom: 10px;
-  padding: 0 4px;
-}
-
-.count {
-  font-weight: 400;
-  color: var(--tg-theme-hint-color, #888);
-}
-
-.goods-list {
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.goods-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 14px 16px;
-  border-radius: 14px;
-  background: var(--tg-theme-secondary-bg-color, #fff);
-}
-
-.goods-info {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.goods-name {
-  font-weight: 600;
-  font-size: 15px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.goods-meta {
-  font-size: 12px;
-  color: var(--tg-theme-hint-color, #888);
-}
-
-.badge {
-  display: inline-block;
-  background: var(--tg-theme-bg-color, #eee);
-  padding: 1px 6px;
-  border-radius: 6px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  margin-right: 4px;
-}
-
-.paid-btn {
-  flex-shrink: 0;
-  padding: 8px 12px;
-  border-radius: 10px;
-  font-size: 13px;
-  font-weight: 600;
-  background: var(--tg-theme-bg-color, #f0f0f0);
-  color: var(--tg-theme-hint-color, #888);
-  white-space: nowrap;
-}
-
-.paid-btn.paid {
-  background: #dcfce7;
-  color: #15803d;
-}
-
-.goods-actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-}
-
-.trash-btn {
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
-  background: #fef2f2;
-  color: #b91c1c;
-  font-size: 22px;
-  line-height: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.muted {
-  color: var(--tg-theme-hint-color, #888);
-  font-size: 14px;
-}
-
-.empty {
-  text-align: center;
-  padding: 24px;
-}
-
-.spinner {
-  width: 32px;
-  height: 32px;
-  border: 3px solid var(--tg-theme-hint-color, #ccc);
-  border-top-color: var(--tg-theme-button-color, #3390ec);
-  border-radius: 50%;
-  animation: spin 0.7s linear infinite;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-.toast {
-  position: fixed;
-  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
-  left: 16px;
-  right: 16px;
-  padding: 14px 18px;
-  border-radius: 14px;
-  font-size: 15px;
-  font-weight: 600;
-  text-align: center;
-  z-index: 100;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-}
-
-.toast.success {
-  background: #15803d;
-  color: #fff;
-}
-
-.toast.error {
-  background: #dc2626;
-  color: #fff;
-}
-
-.toast-enter-active,
-.toast-leave-active {
-  transition: opacity 0.25s, transform 0.25s;
-}
-
-.toast-enter-from,
-.toast-leave-to {
-  opacity: 0;
-  transform: translateY(12px);
-}
-</style>

@@ -17,6 +17,8 @@ interface CustomerListItem {
 const { initData, ready } = useTelegram()
 const { apiFetch } = useApi(initData)
 const { requireWorker } = useWorkerGate()
+const { confirm } = useConfirm()
+const { formatPrice, formatWeight, formatDate } = useFormatters()
 
 const state = ref<'loading' | 'ok' | 'error'>('loading')
 const errorMessage = ref('')
@@ -41,6 +43,7 @@ const filtersActive = computed(() =>
 
 let searchDebounce: ReturnType<typeof setTimeout> | undefined
 const gated = ref(false)
+const toast = ref<{ type: 'success' | 'error', message: string } | null>(null)
 
 watch(ready, async () => {
   if (!ready.value) return
@@ -90,8 +93,6 @@ function clearFilters() {
   sort.value = 'name'
 }
 
-const toast = ref<{ type: 'success' | 'error', message: string } | null>(null)
-
 function showToast(type: 'success' | 'error', message: string) {
   toast.value = { type, message }
   setTimeout(() => { toast.value = null }, 2500)
@@ -100,7 +101,13 @@ function showToast(type: 'success' | 'error', message: string) {
 async function removeCustomer(customer: CustomerListItem, event: Event) {
   event.preventDefault()
   event.stopPropagation()
-  if (!confirm(`Удалить клиента «${customer.name}» и все его записи в корзину?`)) return
+  const ok = await confirm({
+    title: 'Удалить клиента?',
+    message: `«${customer.name}» и все его записи будут перемещены в корзину.`,
+    confirmLabel: 'В корзину',
+    danger: true,
+  })
+  if (!ok) return
   try {
     await apiFetch(`/api/trash/customers/${customer.id}`, { method: 'DELETE' })
     customers.value = customers.value.filter(c => c.id !== customer.id)
@@ -110,472 +117,131 @@ async function removeCustomer(customer: CustomerListItem, event: Event) {
     showToast('error', e instanceof Error ? e.message : 'Не удалось удалить')
   }
 }
-
-function formatPrice(n: number) {
-  return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'TJS', maximumFractionDigits: 0 }).format(n)
-}
-
-function formatWeight(n: number) {
-  return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 }).format(n) + ' кг'
-}
-
-function formatDate(iso: string | null) {
-  if (!iso) return '—'
-  return new Date(iso).toLocaleDateString('ru-RU', {
-    day: '2-digit',
-    month: '2-digit',
-    year: '2-digit',
-  })
-}
 </script>
 
 <template>
-  <div class="clients-page">
-    <header class="header">
-      <h1>Клиенты</h1>
-      <button class="refresh-btn" aria-label="Обновить" @click="load">
-        ↻
-      </button>
-    </header>
+  <div>
+    <PageHeader title="Клиенты" show-refresh @refresh="load" />
 
-    <main class="main">
-      <section class="card filters-card">
-        <button class="filters-toggle" type="button" @click="filtersOpen = !filtersOpen">
-          <span>
-            Фильтры
-            <span v-if="filtersActive" class="filters-badge">активны</span>
-          </span>
-          <span class="chevron" :class="{ open: filtersOpen }">▾</span>
-        </button>
+    <div class="space-y-3 pb-6">
+      <FiltersSheet
+        v-model="filtersOpen"
+        title="Фильтры"
+        :active="filtersActive"
+        @clear="clearFilters"
+      >
+        <label class="ui-field">
+          <span class="ui-label">Поиск</span>
+          <input v-model="search" type="text" autocomplete="off" placeholder="Имя или телефон" class="ui-input">
+        </label>
 
-        <div v-show="filtersOpen" class="filters-body">
-          <label class="field">
-            <span class="label">Поиск</span>
-            <input
-              v-model="search"
-              type="text"
-              autocomplete="off"
-              placeholder="Имя или телефон"
-            >
+        <div class="grid grid-cols-2 gap-3">
+          <label class="ui-field">
+            <span class="ui-label">Долг</span>
+            <select v-model="debtFilter" class="ui-input">
+              <option value="all">Все</option>
+              <option value="with_debt">С долгом</option>
+              <option value="no_debt">Без долга</option>
+              <option value="no_goods">Без записей</option>
+            </select>
           </label>
-
-          <div class="filter-row two">
-            <label class="field">
-              <span class="label">Долг</span>
-              <select v-model="debtFilter">
-                <option value="all">Все</option>
-                <option value="with_debt">С долгом</option>
-                <option value="no_debt">Без долга</option>
-                <option value="no_goods">Без записей</option>
-              </select>
-            </label>
-            <label class="field">
-              <span class="label">Сортировка</span>
-              <select v-model="sort">
-                <option value="name">По имени</option>
-                <option value="debt">По долгу</option>
-                <option value="revenue">По сумме</option>
-                <option value="goods">По кол-ву</option>
-                <option value="recent">По активности</option>
-              </select>
-            </label>
-          </div>
-
-          <div class="filter-row two">
-            <label class="field">
-              <span class="label">Активность с</span>
-              <input v-model="activityFrom" type="date">
-            </label>
-            <label class="field">
-              <span class="label">Активность по</span>
-              <input v-model="activityTo" type="date">
-            </label>
-          </div>
-
-          <label class="field">
-            <span class="label">Мин. записей</span>
-            <input
-              v-model="minGoods"
-              type="number"
-              min="0"
-              inputmode="numeric"
-              placeholder="0"
-            >
+          <label class="ui-field">
+            <span class="ui-label">Сортировка</span>
+            <select v-model="sort" class="ui-input">
+              <option value="name">По имени</option>
+              <option value="debt">По долгу</option>
+              <option value="revenue">По сумме</option>
+              <option value="goods">По кол-ву</option>
+              <option value="recent">По активности</option>
+            </select>
           </label>
-
-          <button v-if="filtersActive" class="clear-btn" @click="clearFilters">
-            Очистить фильтры
-          </button>
         </div>
-      </section>
 
-      <div v-if="state === 'loading'" class="screen center">
-        <div class="spinner" />
-        <p class="muted">Загрузка…</p>
-      </div>
+        <div class="grid grid-cols-2 gap-3">
+          <label class="ui-field">
+            <span class="ui-label">Активность с</span>
+            <input v-model="activityFrom" type="date" class="ui-input">
+          </label>
+          <label class="ui-field">
+            <span class="ui-label">Активность по</span>
+            <input v-model="activityTo" type="date" class="ui-input">
+          </label>
+        </div>
 
-      <div v-else-if="state === 'error'" class="screen center">
-        <div class="icon-block">⚠️</div>
-        <h2>Ошибка</h2>
-        <p class="muted">{{ errorMessage }}</p>
-        <button class="retry-btn" @click="load">
-          Повторить
+        <label class="ui-field">
+          <span class="ui-label">Мин. записей</span>
+          <input v-model="minGoods" type="number" min="0" inputmode="numeric" placeholder="0" class="ui-input">
+        </label>
+
+        <button
+          v-if="filtersActive"
+          type="button"
+          class="ui-btn-ghost w-full text-brand"
+          @click="clearFilters"
+        >
+          Очистить фильтры
         </button>
+      </FiltersSheet>
+
+      <div class="px-4">
+        <UiSpinner v-if="state === 'loading'" />
+        <UiError v-else-if="state === 'error'" :message="errorMessage" @retry="load" />
+
+        <template v-else>
+          <p class="mb-3 px-1 text-xs font-medium text-muted">
+            Найдено: {{ customers.length }}
+          </p>
+
+          <ul v-if="customers.length" class="space-y-2">
+            <li v-for="customer in customers" :key="customer.id" class="relative">
+              <NuxtLink
+                :to="`/clients/${customer.id}`"
+                class="ui-card block px-4 py-4 pr-14 transition active:scale-[0.99]"
+              >
+                <div class="flex items-start justify-between gap-3">
+                  <div class="min-w-0">
+                    <p class="truncate text-[15px] font-extrabold text-ink">{{ customer.name }}</p>
+                    <p class="mt-0.5 text-xs font-bold tabular-nums text-muted">{{ formatPhone(customer.phone) }}</p>
+                  </div>
+                  <span class="text-lg text-slate-300">›</span>
+                </div>
+                <div class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-medium text-muted">
+                  <span>{{ customer.goodsCount }} зап. · {{ formatWeight(customer.totalWeight) }}</span>
+                  <span class="font-bold text-ink">{{ formatPrice(customer.totalRevenue) }}</span>
+                </div>
+                <p class="mt-1 text-[11px] text-slate-400">
+                  Активность: {{ formatDate(customer.lastActivityAt) }}
+                </p>
+                <div
+                  v-if="customer.unpaidCount"
+                  class="mt-2 inline-flex rounded-xl bg-danger-soft px-2.5 py-1 text-xs font-bold text-danger"
+                >
+                  Долг {{ formatPrice(customer.unpaidRevenue) }}
+                </div>
+              </NuxtLink>
+              <button
+                type="button"
+                class="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-xl bg-danger-soft text-danger"
+                aria-label="Удалить"
+                @click="removeCustomer(customer, $event)"
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+                  <path d="M3 6h18" />
+                  <path d="M8 6V4h8v2" />
+                  <path d="M19 6l-1 14H6L5 6" />
+                </svg>
+              </button>
+            </li>
+          </ul>
+
+          <UiEmpty
+            v-else
+            :message="filtersActive ? 'Ничего не найдено по заданным фильтрам.' : 'Клиентов пока нет.'"
+          />
+        </template>
       </div>
+    </div>
 
-      <template v-else>
-        <p class="count-line muted">
-          Найдено: {{ customers.length }}
-        </p>
-
-        <ul v-if="customers.length" class="clients-list">
-          <li v-for="customer in customers" :key="customer.id" class="client-row">
-            <NuxtLink :to="`/clients/${customer.id}`" class="client-card">
-              <div class="client-main">
-                <span class="client-name">{{ customer.name }}</span>
-                <span class="client-phone">{{ formatPhone(customer.phone) }}</span>
-              </div>
-              <div class="client-stats">
-                <span>{{ customer.goodsCount }} записей · {{ formatWeight(customer.totalWeight) }}</span>
-                <span class="client-revenue">{{ formatPrice(customer.totalRevenue) }}</span>
-              </div>
-              <div class="client-meta">
-                <span>Посл. активность: {{ formatDate(customer.lastActivityAt) }}</span>
-              </div>
-              <div v-if="customer.unpaidCount" class="client-debt">
-                Долг: {{ formatPrice(customer.unpaidRevenue) }} ({{ customer.unpaidCount }})
-              </div>
-              <span class="arrow">›</span>
-            </NuxtLink>
-            <button
-              class="trash-btn"
-              aria-label="Удалить клиента"
-              @click="removeCustomer(customer, $event)"
-            >
-              ×
-            </button>
-          </li>
-        </ul>
-
-        <p v-else class="empty muted">
-          {{ filtersActive ? 'Клиенты не найдены' : 'Клиентов пока нет' }}
-        </p>
-      </template>
-    </main>
-
-    <Transition name="toast">
-      <div v-if="toast" class="toast" :class="toast.type">
-        {{ toast.message }}
-      </div>
-    </Transition>
+    <UiToast :toast="toast" />
   </div>
 </template>
-
-<style scoped>
-.clients-page {
-  min-height: 100%;
-  padding-bottom: env(safe-area-inset-bottom, 16px);
-}
-
-.header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 20px 20px 8px;
-}
-
-.header h1 {
-  font-size: 22px;
-  font-weight: 700;
-}
-
-.refresh-btn {
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
-  background: var(--tg-theme-secondary-bg-color, #eee);
-  font-size: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.main {
-  padding: 0 16px 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.card {
-  background: var(--tg-theme-secondary-bg-color, #fff);
-  border-radius: 16px;
-}
-
-.filters-card {
-  overflow: hidden;
-}
-
-.filters-toggle {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 20px;
-  font-size: 15px;
-  font-weight: 700;
-}
-
-.filters-badge {
-  margin-left: 8px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: var(--tg-theme-button-color, #3390ec);
-  color: var(--tg-theme-button-text-color, #fff);
-  font-size: 11px;
-}
-
-.chevron {
-  transition: transform 0.2s;
-  color: var(--tg-theme-hint-color, #888);
-}
-
-.chevron.open {
-  transform: rotate(180deg);
-}
-
-.filters-body {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  padding: 0 20px 20px;
-}
-
-.filter-row {
-  display: flex;
-  gap: 12px;
-}
-
-.filter-row.two > .field {
-  flex: 1;
-}
-
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.label {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--tg-theme-hint-color, #666);
-  text-transform: uppercase;
-  letter-spacing: 0.4px;
-}
-
-.field input,
-.field select {
-  width: 100%;
-  padding: 12px 14px;
-  border-radius: 12px;
-  border: 2px solid transparent;
-  background: var(--tg-theme-bg-color, #f0f0f0);
-  color: var(--tg-theme-text-color, #111);
-  font-size: 15px;
-}
-
-.field input:focus,
-.field select:focus {
-  border-color: var(--tg-theme-button-color, #3390ec);
-  outline: none;
-}
-
-.clear-btn {
-  align-self: flex-start;
-  padding: 8px 14px;
-  border-radius: 10px;
-  font-size: 13px;
-  font-weight: 600;
-  background: var(--tg-theme-bg-color, #f0f0f0);
-  color: var(--tg-theme-button-color, #3390ec);
-}
-
-.count-line {
-  padding: 0 4px;
-  font-size: 13px;
-}
-
-.clients-list {
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.client-row {
-  position: relative;
-}
-
-.client-card {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 14px 72px 14px 16px;
-  border-radius: 14px;
-  background: var(--tg-theme-secondary-bg-color, #fff);
-  color: inherit;
-  text-decoration: none;
-}
-
-.client-main {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.client-name {
-  font-size: 16px;
-  font-weight: 700;
-}
-
-.client-phone {
-  font-size: 13px;
-  color: var(--tg-theme-hint-color, #888);
-  font-variant-numeric: tabular-nums;
-}
-
-.client-stats {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  font-size: 12px;
-  color: var(--tg-theme-hint-color, #666);
-}
-
-.client-revenue {
-  font-weight: 700;
-  color: var(--tg-theme-text-color, #111);
-}
-
-.client-meta {
-  font-size: 11px;
-  color: var(--tg-theme-hint-color, #999);
-}
-
-.client-debt {
-  font-size: 12px;
-  font-weight: 600;
-  color: #dc2626;
-}
-
-.arrow {
-  position: absolute;
-  right: 14px;
-  top: 50%;
-  transform: translateY(-50%);
-  font-size: 22px;
-  color: var(--tg-theme-hint-color, #aaa);
-}
-
-.trash-btn {
-  position: absolute;
-  right: 40px;
-  top: 50%;
-  transform: translateY(-50%);
-  z-index: 1;
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  background: #fef2f2;
-  color: #b91c1c;
-  font-size: 22px;
-  line-height: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.toast {
-  position: fixed;
-  left: 16px;
-  right: 16px;
-  bottom: calc(16px + env(safe-area-inset-bottom));
-  z-index: 50;
-  padding: 12px 16px;
-  border-radius: 12px;
-  font-size: 14px;
-  font-weight: 600;
-  text-align: center;
-  color: #fff;
-}
-
-.toast.success {
-  background: #15803d;
-}
-
-.toast.error {
-  background: #b91c1c;
-}
-
-.toast-enter-active,
-.toast-leave-active {
-  transition: opacity 0.2s ease, transform 0.2s ease;
-}
-
-.toast-enter-from,
-.toast-leave-to {
-  opacity: 0;
-  transform: translateY(8px);
-}
-
-.screen {
-  min-height: 40dvh;
-  padding: 24px;
-}
-
-.center {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  text-align: center;
-}
-
-.icon-block {
-  font-size: 40px;
-}
-
-.retry-btn {
-  padding: 10px 18px;
-  border-radius: 12px;
-  background: var(--tg-theme-button-color, #3390ec);
-  color: var(--tg-theme-button-text-color, #fff);
-  font-weight: 600;
-}
-
-.empty {
-  text-align: center;
-  padding: 24px;
-}
-
-.muted {
-  color: var(--tg-theme-hint-color, #888);
-  font-size: 14px;
-}
-
-.spinner {
-  width: 32px;
-  height: 32px;
-  border: 3px solid var(--tg-theme-hint-color, #ccc);
-  border-top-color: var(--tg-theme-button-color, #3390ec);
-  border-radius: 50%;
-  animation: spin 0.7s linear infinite;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-</style>

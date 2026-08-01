@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import type { CustomerGood } from '~/composables/useTelegram'
-import { formatPhone, normalizePhone } from '#shared/utils/phone'
+import { normalizePhone } from '#shared/utils/phone'
 
 const { initData, ready, haptic } = useTelegram()
 const { apiFetch } = useApi(initData)
 const { requireWorker } = useWorkerGate()
+const { confirm } = useConfirm()
+const { formatPrice, formatWeight, formatDateTime } = useFormatters()
 
 const state = ref<'loading' | 'ok' | 'error'>('loading')
 const errorMessage = ref('')
@@ -13,7 +15,7 @@ const loadingGoods = ref(false)
 const exporting = ref(false)
 const toast = ref<{ type: 'success' | 'error', message: string } | null>(null)
 
-const filtersOpen = ref(true)
+const filtersOpen = ref(false)
 const search = ref('')
 const paidFilter = ref<'all' | 'paid' | 'unpaid'>('all')
 const dateFrom = ref('')
@@ -145,7 +147,13 @@ async function togglePaid(item: CustomerGood) {
 }
 
 async function removeGood(item: CustomerGood) {
-  if (!confirm(`Удалить запись «${item.name}» в корзину?`)) return
+  const ok = await confirm({
+    title: 'Удалить запись?',
+    message: `«${item.name}» будет перемещена в корзину.`,
+    confirmLabel: 'В корзину',
+    danger: true,
+  })
+  if (!ok) return
   try {
     await apiFetch(`/api/trash/goods/${item.id}`, { method: 'DELETE' })
     goods.value = goods.value.filter(g => g.id !== item.id)
@@ -161,480 +169,93 @@ function showToast(type: 'success' | 'error', message: string) {
   haptic(type)
   setTimeout(() => { toast.value = null }, 2500)
 }
-
-function formatPrice(n: number) {
-  return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'TJS', maximumFractionDigits: 0 }).format(n)
-}
-
-function formatWeight(n: number) {
-  return `${n} кг`
-}
-
-function formatDateTime(iso: string) {
-  return new Date(iso).toLocaleString('ru-RU', {
-    day: '2-digit',
-    month: '2-digit',
-    year: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
 </script>
 
 <template>
-  <div class="goods-page">
-    <header class="header">
-      <h1>Записи</h1>
-      <button class="refresh-btn" aria-label="Обновить" :disabled="loadingGoods" @click="load">
-        ↻
-      </button>
-    </header>
+  <div>
+    <PageHeader title="Записи" show-refresh :refreshing="loadingGoods" @refresh="load" />
 
-    <main class="main">
-      <section class="card filters-card">
-        <button class="filters-toggle" type="button" @click="filtersOpen = !filtersOpen">
-          <span>
-            Фильтры и экспорт
-            <span v-if="filtersActive" class="filters-badge">активны</span>
-          </span>
-          <span class="chevron" :class="{ open: filtersOpen }">▾</span>
-        </button>
+    <div class="space-y-3 pb-6">
+      <FiltersSheet
+        v-model="filtersOpen"
+        title="Фильтры и экспорт"
+        :active="filtersActive"
+        @clear="clearFilters"
+      >
+        <label class="ui-field">
+          <span class="ui-label">Поиск</span>
+          <input v-model="search" type="text" autocomplete="off" placeholder="Имя или телефон" class="ui-input">
+        </label>
 
-        <div v-show="filtersOpen" class="filters-body">
-          <label class="field">
-            <span class="label">Поиск</span>
-            <input
-              v-model="search"
-              type="text"
-              autocomplete="off"
-              placeholder="Имя или телефон"
-            >
+        <label class="ui-field">
+          <span class="ui-label">Статус оплаты</span>
+          <select v-model="paidFilter" class="ui-input">
+            <option value="all">Все</option>
+            <option value="paid">Оплачено</option>
+            <option value="unpaid">Не оплачено</option>
+          </select>
+        </label>
+
+        <div class="grid grid-cols-2 gap-3">
+          <label class="ui-field">
+            <span class="ui-label">Дата с</span>
+            <input v-model="dateFrom" type="date" class="ui-input">
           </label>
+          <label class="ui-field">
+            <span class="ui-label">Дата по</span>
+            <input v-model="dateTo" type="date" class="ui-input">
+          </label>
+        </div>
 
-          <div class="filter-row">
-            <label class="field">
-              <span class="label">Статус оплаты</span>
-              <select v-model="paidFilter">
-                <option value="all">Все</option>
-                <option value="paid">Оплачено</option>
-                <option value="unpaid">Не оплачено</option>
-              </select>
-            </label>
-          </div>
-
-          <div class="filter-row two">
-            <label class="field">
-              <span class="label">Дата с</span>
-              <input v-model="dateFrom" type="date">
-            </label>
-            <label class="field">
-              <span class="label">Дата по</span>
-              <input v-model="dateTo" type="date">
-            </label>
-          </div>
-
-          <div class="export-block">
-            <span class="export-title">Экспорт за выбранный период</span>
-            <button class="export-btn" :disabled="exporting" @click="copyExport">
-              {{ exporting ? 'Копирование…' : 'Копировать список' }}
-            </button>
-          </div>
-
-          <button v-if="filtersActive" class="clear-btn" @click="clearFilters">
-            Очистить фильтры
+        <div class="rounded-[1.35rem] border border-white/60 bg-white/40 p-3">
+          <p class="mb-2 text-xs font-medium text-muted">Экспорт за выбранный период</p>
+          <button type="button" class="ui-btn-primary w-full py-3 text-sm" :disabled="exporting" @click="copyExport">
+            {{ exporting ? 'Копирование…' : 'Копировать список' }}
           </button>
         </div>
-      </section>
 
-      <div v-if="state === 'loading'" class="screen center">
-        <div class="spinner" />
-        <p class="muted">Загрузка…</p>
-      </div>
-
-      <div v-else-if="state === 'error'" class="screen center">
-        <div class="icon-block">⚠️</div>
-        <h2>Ошибка</h2>
-        <p class="muted">{{ errorMessage }}</p>
-        <button class="retry-btn" @click="load">
-          Повторить
+        <button
+          v-if="filtersActive"
+          type="button"
+          class="ui-btn-ghost w-full text-brand"
+          @click="clearFilters"
+        >
+          Очистить фильтры
         </button>
+      </FiltersSheet>
+
+      <div class="px-4">
+        <UiSpinner v-if="state === 'loading'" />
+        <UiError v-else-if="state === 'error'" :message="errorMessage" @retry="load" />
+
+        <template v-else>
+          <p class="mb-3 px-1 text-xs font-medium text-muted">
+            Найдено: {{ goods.length }}
+            <span v-if="loadingGoods"> · обновление…</span>
+          </p>
+
+          <ul v-if="goods.length" class="space-y-2">
+            <GoodsRow
+              v-for="item in goods"
+              :key="item.id"
+              :name="item.name"
+              :phone="item.phone"
+              :meta="`${formatWeight(item.weight)} · ${formatPrice(item.price)} · ${formatDateTime(item.created_at)}`"
+              :initiator="item.initiator"
+              :has-paid="item.has_paid"
+              @toggle-paid="togglePaid(item)"
+              @remove="removeGood(item)"
+            />
+          </ul>
+
+          <UiEmpty
+            v-else
+            :message="filtersActive ? 'Ничего не найдено по заданным фильтрам.' : 'Записей пока нет.'"
+          />
+        </template>
       </div>
+    </div>
 
-      <template v-else>
-        <p class="count-line muted">
-          Найдено: {{ goods.length }}
-          <span v-if="loadingGoods"> · обновление…</span>
-        </p>
-
-        <ul v-if="goods.length" class="goods-list">
-          <li v-for="item in goods" :key="item.id" class="goods-item">
-            <div class="goods-info">
-              <span class="goods-name">{{ item.name }}</span>
-              <span class="goods-meta">
-                <span class="badge">{{ formatPhone(item.phone) }}</span>
-                {{ formatWeight(item.weight) }} · {{ formatPrice(item.price) }}
-                · {{ formatDateTime(item.created_at) }}
-              </span>
-              <span v-if="item.initiator" class="goods-initiator">
-                Оплату отметил: {{ item.initiator }}
-              </span>
-            </div>
-            <div class="goods-actions">
-              <button
-                class="paid-btn"
-                :class="{ paid: item.has_paid }"
-                @click="togglePaid(item)"
-              >
-                {{ item.has_paid ? '✓ Оплачено' : 'Не оплачено' }}
-              </button>
-              <button class="trash-btn" aria-label="Удалить" @click="removeGood(item)">
-                ×
-              </button>
-            </div>
-          </li>
-        </ul>
-
-        <p v-else class="empty muted">
-          {{ filtersActive ? 'Ничего не найдено по заданным фильтрам.' : 'Записей пока нет.' }}
-        </p>
-      </template>
-    </main>
-
-    <Transition name="toast">
-      <div v-if="toast" class="toast" :class="toast.type">
-        {{ toast.message }}
-      </div>
-    </Transition>
+    <UiToast :toast="toast" />
   </div>
 </template>
-
-<style scoped>
-.goods-page {
-  min-height: 100%;
-  padding-bottom: env(safe-area-inset-bottom, 16px);
-}
-
-.header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 20px 20px 8px;
-}
-
-.header h1 {
-  font-size: 22px;
-  font-weight: 700;
-}
-
-.refresh-btn {
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
-  background: var(--tg-theme-secondary-bg-color, #eee);
-  font-size: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.main {
-  padding: 0 16px 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.card {
-  background: var(--tg-theme-secondary-bg-color, #fff);
-  border-radius: 16px;
-}
-
-.filters-card {
-  overflow: hidden;
-}
-
-.filters-toggle {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 20px;
-  font-size: 15px;
-  font-weight: 700;
-}
-
-.filters-badge {
-  margin-left: 8px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: var(--tg-theme-button-color, #3390ec);
-  color: var(--tg-theme-button-text-color, #fff);
-  font-size: 11px;
-}
-
-.chevron {
-  transition: transform 0.2s;
-  color: var(--tg-theme-hint-color, #888);
-}
-
-.chevron.open {
-  transform: rotate(180deg);
-}
-
-.filters-body {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  padding: 0 20px 20px;
-}
-
-.filter-row {
-  display: flex;
-  gap: 12px;
-}
-
-.filter-row.two > .field {
-  flex: 1;
-}
-
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.label {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--tg-theme-hint-color, #666);
-  text-transform: uppercase;
-  letter-spacing: 0.4px;
-}
-
-.field input,
-.field select {
-  width: 100%;
-  padding: 12px 14px;
-  border-radius: 12px;
-  border: 2px solid transparent;
-  background: var(--tg-theme-bg-color, #f0f0f0);
-  color: var(--tg-theme-text-color, #111);
-  font-size: 15px;
-}
-
-.field input:focus,
-.field select:focus {
-  border-color: var(--tg-theme-button-color, #3390ec);
-  outline: none;
-}
-
-.export-block {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.export-title {
-  font-size: 12px;
-  color: var(--tg-theme-hint-color, #888);
-}
-
-.export-btn {
-  width: 100%;
-  padding: 12px;
-  border-radius: 12px;
-  background: var(--tg-theme-button-color, #3390ec);
-  color: var(--tg-theme-button-text-color, #fff);
-  font-size: 14px;
-  font-weight: 700;
-}
-
-.export-btn:disabled {
-  opacity: 0.5;
-}
-
-.clear-btn {
-  align-self: flex-start;
-  padding: 8px 14px;
-  border-radius: 10px;
-  font-size: 13px;
-  font-weight: 600;
-  background: var(--tg-theme-bg-color, #f0f0f0);
-  color: var(--tg-theme-button-color, #3390ec);
-}
-
-.count-line {
-  padding: 0 4px;
-  font-size: 13px;
-}
-
-.goods-list {
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.goods-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 14px 16px;
-  border-radius: 14px;
-  background: var(--tg-theme-secondary-bg-color, #fff);
-}
-
-.goods-info {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.goods-name {
-  font-weight: 600;
-  font-size: 15px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.goods-meta {
-  font-size: 12px;
-  color: var(--tg-theme-hint-color, #888);
-}
-
-.goods-initiator {
-  font-size: 11px;
-  color: var(--tg-theme-hint-color, #999);
-}
-
-.badge {
-  display: inline-block;
-  background: var(--tg-theme-bg-color, #eee);
-  padding: 1px 6px;
-  border-radius: 6px;
-  font-weight: 700;
-  margin-right: 4px;
-}
-
-.paid-btn {
-  flex-shrink: 0;
-  padding: 8px 12px;
-  border-radius: 10px;
-  font-size: 13px;
-  font-weight: 600;
-  background: var(--tg-theme-bg-color, #f0f0f0);
-  color: var(--tg-theme-hint-color, #888);
-  white-space: nowrap;
-}
-
-.paid-btn.paid {
-  background: #dcfce7;
-  color: #15803d;
-}
-
-.goods-actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-}
-
-.trash-btn {
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
-  background: #fef2f2;
-  color: #b91c1c;
-  font-size: 22px;
-  line-height: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.screen {
-  min-height: 30dvh;
-  padding: 24px;
-}
-
-.center {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  text-align: center;
-}
-
-.icon-block {
-  font-size: 40px;
-}
-
-.retry-btn {
-  padding: 10px 18px;
-  border-radius: 12px;
-  background: var(--tg-theme-button-color, #3390ec);
-  color: var(--tg-theme-button-text-color, #fff);
-  font-weight: 600;
-}
-
-.empty {
-  text-align: center;
-  padding: 24px;
-}
-
-.muted {
-  color: var(--tg-theme-hint-color, #888);
-  font-size: 14px;
-}
-
-.spinner {
-  width: 32px;
-  height: 32px;
-  border: 3px solid var(--tg-theme-hint-color, #ccc);
-  border-top-color: var(--tg-theme-button-color, #3390ec);
-  border-radius: 50%;
-  animation: spin 0.7s linear infinite;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-.toast {
-  position: fixed;
-  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
-  left: 16px;
-  right: 16px;
-  padding: 14px 18px;
-  border-radius: 14px;
-  font-size: 15px;
-  font-weight: 600;
-  text-align: center;
-  z-index: 100;
-}
-
-.toast.success {
-  background: #15803d;
-  color: #fff;
-}
-
-.toast.error {
-  background: #dc2626;
-  color: #fff;
-}
-
-.toast-enter-active,
-.toast-leave-active {
-  transition: opacity 0.25s, transform 0.25s;
-}
-
-.toast-enter-from,
-.toast-leave-to {
-  opacity: 0;
-  transform: translateY(12px);
-}
-</style>

@@ -36,7 +36,7 @@ const loading = ref(false)
 const searched = ref(false)
 const errorMessage = ref('')
 const result = ref<LookupResult | null>(null)
-const phoneRef = ref<HTMLInputElement>()
+const phoneField = ref<{ focus: () => void } | null>(null)
 
 const phoneDigits = computed(() => normalizePhone(phone.value))
 const canSearch = computed(() => isValidPhone(phoneDigits.value) && !loading.value)
@@ -47,8 +47,10 @@ const numberLocale = computed(() => {
   return 'ru-RU'
 })
 
+const formatters = computed(() => useFormatters(numberLocale.value))
+
 onMounted(() => {
-  nextTick(() => phoneRef.value?.focus())
+  nextTick(() => phoneField.value?.focus())
 })
 
 function onPhoneInput(e: Event) {
@@ -88,343 +90,86 @@ async function lookup() {
   }
 }
 
-function formatPrice(n: number) {
-  return new Intl.NumberFormat(numberLocale.value, {
-    style: 'currency',
-    currency: 'TJS',
-    maximumFractionDigits: 0,
-  }).format(n)
-}
-
-function formatWeight(n: number) {
-  return new Intl.NumberFormat(numberLocale.value, { maximumFractionDigits: 1 }).format(n) + ` ${t('track.kg')}`
-}
-
-function formatDateTime(iso: string) {
-  return new Date(iso).toLocaleString(numberLocale.value, {
-    day: '2-digit',
-    month: '2-digit',
-    year: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
+const statItems = computed(() => {
+  if (!result.value?.found) return []
+  const f = formatters.value
+  const s = result.value.stats
+  return [
+    { label: t('track.records'), value: s.totalCount },
+    { label: t('track.weight'), value: f.formatWeight(s.totalWeight, t('track.kg')) },
+    { label: t('track.amount'), value: f.formatPrice(s.totalRevenue) },
+    { label: t('track.toPay'), value: f.formatPrice(s.unpaidRevenue), tone: 'danger' as const },
+  ]
+})
 </script>
 
 <template>
-  <div class="track-page">
-    <header class="header">
-      <h1>{{ $t('track.title') }}</h1>
-      <p class="subtitle">{{ $t('track.subtitle') }}</p>
+  <div class="animate-fade-up">
+    <header class="px-5 pb-3 pt-2">
+      <p class="text-[11px] font-extrabold uppercase tracking-[0.16em] text-brand/80">Aliya Cargo</p>
+      <h1 class="mt-1 text-[30px] font-extrabold leading-[1.05] tracking-[-0.03em] text-ink">{{ $t('track.title') }}</h1>
+      <p class="mt-2 max-w-sm text-sm font-semibold leading-relaxed text-muted">{{ $t('track.subtitle') }}</p>
     </header>
 
-    <main class="main">
-      <section class="card">
-        <label class="field">
-          <span class="label">{{ $t('track.phone') }} <span class="hint">{{ $t('track.phoneHint') }}</span></span>
-          <div class="phone-row">
-            <span class="phone-prefix">+992</span>
-            <input
-              ref="phoneRef"
-              :value="phone"
-              type="text"
-              inputmode="numeric"
-              autocomplete="tel"
-              placeholder="### ##-##-##"
-              class="phone-input"
-              @input="onPhoneInput"
-              @keydown.enter.prevent="lookup"
-            >
-          </div>
-        </label>
-
-        <button class="submit-btn" :class="{ ready: canSearch }" :disabled="!canSearch" @click="lookup">
+    <main class="animate-fade-up space-y-4 px-4 pb-8">
+      <section class="ui-card space-y-4 p-5">
+        <UiPhoneField
+          ref="phoneField"
+          :model-value="phone"
+          :label="$t('track.phone')"
+          :hint="$t('track.phoneHint')"
+          @input="onPhoneInput"
+          @enter="lookup"
+        />
+        <button
+          type="button"
+          class="ui-btn-primary w-full"
+          :class="{ 'opacity-100': canSearch, 'opacity-40': !canSearch }"
+          :disabled="!canSearch"
+          @click="lookup"
+        >
           {{ loading ? $t('track.searching') : $t('track.search') }}
         </button>
       </section>
 
-      <p v-if="errorMessage" class="error">{{ errorMessage }}</p>
+      <p v-if="errorMessage" class="text-center text-sm font-bold text-danger">{{ errorMessage }}</p>
 
       <template v-if="searched && result && !errorMessage">
-        <section v-if="!result.found" class="card empty-card">
-          <p class="muted">{{ $t('track.notFound', { phone: result.displayPhone }) }}</p>
+        <section v-if="!result.found" class="ui-card px-5 py-8 text-center">
+          <p class="text-sm font-medium text-muted">{{ $t('track.notFound', { phone: result.displayPhone }) }}</p>
         </section>
 
         <template v-else>
-          <section class="card identity">
-            <h2>{{ result.customer?.name }}</h2>
-            <p class="phone-line">+992 {{ result.displayPhone }}</p>
+          <section class="ui-card px-5 py-5">
+            <h2 class="text-xl font-extrabold text-ink">{{ result.customer?.name }}</h2>
+            <p class="mt-1 text-sm font-bold tabular-nums text-brand">+992 {{ result.displayPhone }}</p>
           </section>
 
-          <section class="cards-grid">
-            <div class="stat-card">
-              <span class="stat-label">{{ $t('track.records') }}</span>
-              <span class="stat-value">{{ result.stats.totalCount }}</span>
-            </div>
-            <div class="stat-card">
-              <span class="stat-label">{{ $t('track.weight') }}</span>
-              <span class="stat-value">{{ formatWeight(result.stats.totalWeight) }}</span>
-            </div>
-            <div class="stat-card">
-              <span class="stat-label">{{ $t('track.amount') }}</span>
-              <span class="stat-value">{{ formatPrice(result.stats.totalRevenue) }}</span>
-            </div>
-            <div class="stat-card danger">
-              <span class="stat-label">{{ $t('track.toPay') }}</span>
-              <span class="stat-value">{{ formatPrice(result.stats.unpaidRevenue) }}</span>
-            </div>
-          </section>
+          <UiStatGrid :items="statItems" />
 
-          <section class="history">
-            <h3 class="section-title">{{ $t('track.history') }}</h3>
-            <ul v-if="result.goods.length" class="goods-list">
-              <li v-for="(item, index) in result.goods" :key="`${item.created_at}-${index}`" class="goods-item">
-                <div class="goods-info">
-                  <span class="goods-title">
-                    {{ formatWeight(item.weight) }} · {{ formatPrice(item.price) }}
-                  </span>
-                  <span class="goods-meta">{{ formatDateTime(item.created_at) }}</span>
-                </div>
-                <span class="paid-badge" :class="{ paid: item.has_paid }">
-                  {{ item.has_paid ? $t('track.paid') : $t('track.unpaid') }}
-                </span>
-              </li>
+          <section class="space-y-2.5">
+            <h3 class="px-1 text-sm font-bold text-ink">{{ $t('track.history') }}</h3>
+            <ul v-if="result.goods.length" class="space-y-2">
+              <GoodsRow
+                v-for="(item, index) in result.goods"
+                :key="`${item.created_at}-${index}`"
+                :title="`${formatters.formatWeight(item.weight, $t('track.kg'))} · ${formatters.formatPrice(item.price)}`"
+                :meta="formatters.formatDateTime(item.created_at)"
+                :has-paid="item.has_paid"
+                :paid-label="$t('track.paid')"
+                :unpaid-label="$t('track.unpaid')"
+                readonly
+                :show-trash="false"
+              />
             </ul>
-            <p v-else class="muted empty">{{ $t('track.noItems') }}</p>
+            <UiEmpty v-else :message="$t('track.noItems')" />
           </section>
         </template>
       </template>
 
-      <p class="hint-bottom muted">
+      <p class="px-1 pt-2 text-center text-xs font-medium text-muted">
         {{ $t('track.viewOnly') }}
       </p>
     </main>
   </div>
 </template>
-
-<style scoped>
-.track-page {
-  padding-bottom: env(safe-area-inset-bottom, 16px);
-}
-
-.header {
-  padding: 20px 20px 8px;
-}
-
-.header h1 {
-  font-size: 22px;
-  font-weight: 700;
-}
-
-.subtitle {
-  margin-top: 6px;
-  font-size: 14px;
-  color: var(--tg-theme-hint-color, #888);
-}
-
-.main {
-  padding: 0 16px 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.card {
-  background: var(--tg-theme-secondary-bg-color, #fff);
-  border-radius: 16px;
-  padding: 20px;
-}
-
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-bottom: 16px;
-}
-
-.label {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--tg-theme-hint-color, #666);
-  text-transform: uppercase;
-  letter-spacing: 0.4px;
-}
-
-.hint {
-  font-weight: 400;
-  text-transform: none;
-  letter-spacing: 0;
-}
-
-.phone-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.phone-prefix {
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--tg-theme-hint-color, #666);
-}
-
-.phone-input {
-  width: 100%;
-  padding: 14px 16px;
-  border-radius: 12px;
-  border: 2px solid transparent;
-  background: var(--tg-theme-bg-color, #f0f0f0);
-  font-size: 22px;
-  font-weight: 700;
-  letter-spacing: 1px;
-}
-
-.phone-input:focus {
-  border-color: var(--tg-theme-button-color, #3390ec);
-  outline: none;
-}
-
-.submit-btn {
-  width: 100%;
-  padding: 16px;
-  border-radius: 14px;
-  font-size: 17px;
-  font-weight: 700;
-  background: var(--tg-theme-button-color, #3390ec);
-  color: var(--tg-theme-button-text-color, #fff);
-  opacity: 0.4;
-}
-
-.submit-btn.ready {
-  opacity: 1;
-}
-
-.submit-btn:disabled {
-  cursor: not-allowed;
-}
-
-.identity h2 {
-  font-size: 22px;
-  font-weight: 700;
-}
-
-.phone-line {
-  margin-top: 4px;
-  font-size: 15px;
-  font-weight: 600;
-}
-
-.cards-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-}
-
-.stat-card {
-  background: var(--tg-theme-secondary-bg-color, #fff);
-  border-radius: 14px;
-  padding: 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.stat-card.danger {
-  background: #fef2f2;
-}
-
-.stat-card.danger .stat-value {
-  color: #dc2626;
-}
-
-.stat-label {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--tg-theme-hint-color, #888);
-  text-transform: uppercase;
-}
-
-.stat-value {
-  font-size: 17px;
-  font-weight: 700;
-}
-
-.section-title {
-  font-size: 15px;
-  font-weight: 700;
-  margin-bottom: 10px;
-  padding: 0 4px;
-}
-
-.goods-list {
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.goods-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 14px 16px;
-  border-radius: 14px;
-  background: var(--tg-theme-secondary-bg-color, #fff);
-}
-
-.goods-info {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.goods-title {
-  font-size: 14px;
-  font-weight: 700;
-}
-
-.goods-meta {
-  font-size: 12px;
-  color: var(--tg-theme-hint-color, #888);
-}
-
-.paid-badge {
-  flex-shrink: 0;
-  padding: 8px 12px;
-  border-radius: 10px;
-  font-size: 12px;
-  font-weight: 600;
-  background: var(--tg-theme-bg-color, #f0f0f0);
-  color: var(--tg-theme-hint-color, #888);
-}
-
-.paid-badge.paid {
-  background: #dcfce7;
-  color: #15803d;
-}
-
-.error {
-  color: #dc2626;
-  font-size: 14px;
-  font-weight: 600;
-  text-align: center;
-}
-
-.muted {
-  color: var(--tg-theme-hint-color, #888);
-  font-size: 14px;
-}
-
-.empty-card,
-.empty,
-.hint-bottom {
-  text-align: center;
-}
-
-.hint-bottom {
-  padding: 8px 4px 0;
-  font-size: 12px;
-}
-</style>

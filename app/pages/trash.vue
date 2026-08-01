@@ -34,12 +34,15 @@ interface TrashResponse {
 const { initData, ready, haptic } = useTelegram()
 const { apiFetch } = useApi(initData)
 const { requireWorker } = useWorkerGate()
+const { confirm } = useConfirm()
+const { formatPrice, formatWeight, formatDateTime } = useFormatters()
 
 const state = ref<'loading' | 'ok' | 'error'>('loading')
 const errorMessage = ref('')
 const trash = ref<TrashResponse | null>(null)
 const toast = ref<{ type: 'success' | 'error', message: string } | null>(null)
 const busyId = ref<string | null>(null)
+const segment = ref<'customers' | 'goods'>('customers')
 
 watch(ready, async () => {
   if (!ready.value) return
@@ -66,7 +69,12 @@ function showToast(type: 'success' | 'error', message: string) {
 }
 
 async function restoreGood(item: TrashGood) {
-  if (!confirm(`Восстановить запись «${item.name}»?`)) return
+  const ok = await confirm({
+    title: 'Восстановить запись?',
+    message: `«${item.name}» вернётся в активные записи.`,
+    confirmLabel: 'Восстановить',
+  })
+  if (!ok) return
   busyId.value = `good-${item.id}`
   try {
     await apiFetch(`/api/trash/goods/${item.id}`, { method: 'POST' })
@@ -82,7 +90,12 @@ async function restoreGood(item: TrashGood) {
 }
 
 async function restoreCustomer(item: TrashCustomer) {
-  if (!confirm(`Восстановить клиента «${item.name}» и связанные записи?`)) return
+  const ok = await confirm({
+    title: 'Восстановить клиента?',
+    message: `«${item.name}» и связанные записи будут восстановлены.`,
+    confirmLabel: 'Восстановить',
+  })
+  if (!ok) return
   busyId.value = `customer-${item.id}`
   try {
     await apiFetch(`/api/trash/customers/${item.id}`, { method: 'POST' })
@@ -96,317 +109,95 @@ async function restoreCustomer(item: TrashCustomer) {
     busyId.value = null
   }
 }
-
-function formatPrice(n: number) {
-  return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'TJS', maximumFractionDigits: 0 }).format(n)
-}
-
-function formatWeight(n: number) {
-  return `${n} кг`
-}
-
-function formatDateTime(iso: string) {
-  return new Date(iso).toLocaleString('ru-RU', {
-    day: '2-digit',
-    month: '2-digit',
-    year: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
 </script>
 
 <template>
-  <div class="trash-page">
-    <header class="header">
-      <div>
-        <h1>Корзина</h1>
-        <p v-if="trash" class="subtitle">
-          Удаляется безвозвратно через {{ trash.retentionDays }} дн.
-        </p>
-      </div>
-      <button class="refresh-btn" aria-label="Обновить" @click="load">
-        ↻
-      </button>
-    </header>
+  <div>
+    <PageHeader
+      title="Корзина"
+      :subtitle="trash ? `Удаляется через ${trash.retentionDays} дн.` : undefined"
+      show-refresh
+      @refresh="load"
+    />
 
-    <main class="main">
-      <div v-if="state === 'loading'" class="screen center">
-        <div class="spinner" />
-        <p class="muted">Загрузка…</p>
-      </div>
-
-      <div v-else-if="state === 'error'" class="screen center">
-        <div class="icon-block">⚠️</div>
-        <h2>Ошибка</h2>
-        <p class="muted">{{ errorMessage }}</p>
-        <button class="retry-btn" @click="load">
-          Повторить
+    <div class="px-4 pb-3">
+      <div class="ui-glass-strong grid grid-cols-2 gap-1 rounded-blob p-1.5">
+        <button
+          type="button"
+          class="rounded-full py-2.5 text-sm font-extrabold transition duration-200 ease-expressive"
+          :class="segment === 'customers' ? 'ui-chip-active' : 'text-muted'"
+          @click="segment = 'customers'"
+        >
+          Клиенты
+          <span v-if="trash" class="opacity-80">({{ trash.customers.length }})</span>
+        </button>
+        <button
+          type="button"
+          class="rounded-full py-2.5 text-sm font-extrabold transition duration-200 ease-expressive"
+          :class="segment === 'goods' ? 'ui-chip-active' : 'text-muted'"
+          @click="segment = 'goods'"
+        >
+          Записи
+          <span v-if="trash" class="opacity-80">({{ trash.goods.length }})</span>
         </button>
       </div>
+    </div>
+
+    <main class="px-4 pb-6">
+      <UiSpinner v-if="state === 'loading'" />
+      <UiError v-else-if="state === 'error'" :message="errorMessage" @retry="load" />
 
       <template v-else-if="trash">
-        <section>
-          <h2 class="section-title">
-            Клиенты
-            <span class="count">{{ trash.customers.length }}</span>
-          </h2>
-          <ul v-if="trash.customers.length" class="list">
-            <li v-for="item in trash.customers" :key="`c-${item.id}`" class="item">
-              <div class="info">
-                <span class="name">{{ item.name }}</span>
-                <span class="meta">
-                  {{ formatPhone(item.phone) }} · удалено {{ formatDateTime(item.deleted_at) }}
-                </span>
-                <span class="days">Осталось {{ item.daysLeft }} дн.</span>
-              </div>
-              <button
-                class="restore-btn"
-                :disabled="busyId === `customer-${item.id}`"
-                @click="restoreCustomer(item)"
-              >
-                Восстановить
-              </button>
-            </li>
-          </ul>
-          <p v-else class="empty muted">Нет удалённых клиентов</p>
-        </section>
+        <ul v-if="segment === 'customers' && trash.customers.length" class="space-y-2">
+          <li v-for="item in trash.customers" :key="`c-${item.id}`" class="ui-card flex items-center gap-3 px-4 py-3.5">
+            <div class="min-w-0 flex-1">
+              <p class="truncate text-[15px] font-bold text-ink">{{ item.name }}</p>
+              <p class="mt-0.5 text-xs text-muted">
+                {{ formatPhone(item.phone) }} · {{ formatDateTime(item.deleted_at) }}
+              </p>
+              <span class="mt-1.5 inline-flex rounded-lg bg-accent-soft px-2 py-0.5 text-[11px] font-bold text-amber-800">
+                {{ item.daysLeft }} дн.
+              </span>
+            </div>
+            <button
+              type="button"
+              class="shrink-0 rounded-xl bg-brand-soft px-3 py-2 text-xs font-bold text-brand"
+              :disabled="busyId === `customer-${item.id}`"
+              @click="restoreCustomer(item)"
+            >
+              Восстановить
+            </button>
+          </li>
+        </ul>
+        <UiEmpty v-else-if="segment === 'customers'" message="Нет удалённых клиентов" />
 
-        <section>
-          <h2 class="section-title">
-            Записи
-            <span class="count">{{ trash.goods.length }}</span>
-          </h2>
-          <ul v-if="trash.goods.length" class="list">
-            <li v-for="item in trash.goods" :key="`g-${item.id}`" class="item">
-              <div class="info">
-                <span class="name">{{ item.name || 'Без имени' }}</span>
-                <span class="meta">
-                  <span v-if="item.phone" class="badge">{{ formatPhone(item.phone) }}</span>
-                  {{ formatWeight(item.weight) }} · {{ formatPrice(item.price) }}
-                </span>
-                <span class="meta">удалено {{ formatDateTime(item.deleted_at) }}</span>
-                <span class="days">Осталось {{ item.daysLeft }} дн.</span>
-              </div>
-              <button
-                class="restore-btn"
-                :disabled="busyId === `good-${item.id}`"
-                @click="restoreGood(item)"
-              >
-                Восстановить
-              </button>
-            </li>
-          </ul>
-          <p v-else class="empty muted">Нет удалённых записей</p>
-        </section>
+        <ul v-if="segment === 'goods' && trash.goods.length" class="space-y-2">
+          <li v-for="item in trash.goods" :key="`g-${item.id}`" class="ui-card flex items-center gap-3 px-4 py-3.5">
+            <div class="min-w-0 flex-1">
+              <p class="truncate text-[15px] font-bold text-ink">{{ item.name || 'Без имени' }}</p>
+              <p class="mt-0.5 text-xs text-muted">
+                <span v-if="item.phone" class="mr-1 font-bold tabular-nums">{{ formatPhone(item.phone) }}</span>
+                {{ formatWeight(item.weight) }} · {{ formatPrice(item.price) }}
+              </p>
+              <p class="mt-0.5 text-[11px] text-slate-400">удалено {{ formatDateTime(item.deleted_at) }}</p>
+              <span class="mt-1.5 inline-flex rounded-lg bg-accent-soft px-2 py-0.5 text-[11px] font-bold text-amber-800">
+                {{ item.daysLeft }} дн.
+              </span>
+            </div>
+            <button
+              type="button"
+              class="shrink-0 rounded-xl bg-brand-soft px-3 py-2 text-xs font-bold text-brand"
+              :disabled="busyId === `good-${item.id}`"
+              @click="restoreGood(item)"
+            >
+              Восстановить
+            </button>
+          </li>
+        </ul>
+        <UiEmpty v-else-if="segment === 'goods'" message="Нет удалённых записей" />
       </template>
     </main>
 
-    <Transition name="toast">
-      <div v-if="toast" class="toast" :class="toast.type">
-        {{ toast.message }}
-      </div>
-    </Transition>
+    <UiToast :toast="toast" />
   </div>
 </template>
-
-<style scoped>
-.trash-page {
-  min-height: 100%;
-  padding-bottom: env(safe-area-inset-bottom, 16px);
-}
-
-.header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  padding: 20px 20px 8px;
-}
-
-.header h1 {
-  font-size: 22px;
-  font-weight: 700;
-}
-
-.subtitle {
-  margin-top: 4px;
-  font-size: 13px;
-  color: var(--tg-theme-hint-color, #888);
-}
-
-.refresh-btn {
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
-  background: var(--tg-theme-secondary-bg-color, #eee);
-  font-size: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.main {
-  padding: 0 16px 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-.section-title {
-  font-size: 15px;
-  font-weight: 700;
-  margin-bottom: 10px;
-  padding: 0 4px;
-}
-
-.count {
-  font-weight: 400;
-  color: var(--tg-theme-hint-color, #888);
-}
-
-.list {
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 14px 16px;
-  border-radius: 14px;
-  background: var(--tg-theme-secondary-bg-color, #fff);
-}
-
-.info {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.name {
-  font-weight: 700;
-  font-size: 15px;
-}
-
-.meta {
-  font-size: 12px;
-  color: var(--tg-theme-hint-color, #888);
-}
-
-.days {
-  font-size: 12px;
-  font-weight: 600;
-  color: #b45309;
-}
-
-.badge {
-  display: inline-block;
-  background: var(--tg-theme-bg-color, #eee);
-  padding: 1px 6px;
-  border-radius: 6px;
-  font-weight: 700;
-  margin-right: 4px;
-}
-
-.restore-btn {
-  flex-shrink: 0;
-  padding: 8px 12px;
-  border-radius: 10px;
-  font-size: 13px;
-  font-weight: 600;
-  background: var(--tg-theme-button-color, #3390ec);
-  color: var(--tg-theme-button-text-color, #fff);
-}
-
-.restore-btn:disabled {
-  opacity: 0.5;
-}
-
-.screen {
-  min-height: 40dvh;
-  padding: 24px;
-}
-
-.center {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  text-align: center;
-}
-
-.icon-block {
-  font-size: 40px;
-}
-
-.retry-btn {
-  padding: 10px 18px;
-  border-radius: 12px;
-  background: var(--tg-theme-button-color, #3390ec);
-  color: var(--tg-theme-button-text-color, #fff);
-  font-weight: 600;
-}
-
-.empty {
-  text-align: center;
-  padding: 12px;
-}
-
-.muted {
-  color: var(--tg-theme-hint-color, #888);
-  font-size: 14px;
-}
-
-.spinner {
-  width: 32px;
-  height: 32px;
-  border: 3px solid var(--tg-theme-hint-color, #ccc);
-  border-top-color: var(--tg-theme-button-color, #3390ec);
-  border-radius: 50%;
-  animation: spin 0.7s linear infinite;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-.toast {
-  position: fixed;
-  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
-  left: 16px;
-  right: 16px;
-  padding: 14px 18px;
-  border-radius: 14px;
-  font-size: 15px;
-  font-weight: 600;
-  text-align: center;
-  z-index: 100;
-}
-
-.toast.success {
-  background: #15803d;
-  color: #fff;
-}
-
-.toast.error {
-  background: #dc2626;
-  color: #fff;
-}
-
-.toast-enter-active,
-.toast-leave-active {
-  transition: opacity 0.25s, transform 0.25s;
-}
-
-.toast-enter-from,
-.toast-leave-to {
-  opacity: 0;
-  transform: translateY(12px);
-}
-</style>

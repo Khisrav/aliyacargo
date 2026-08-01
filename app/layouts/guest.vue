@@ -20,80 +20,35 @@ async function switchLocale(code: string) {
 </script>
 
 <template>
-  <div class="guest-layout">
-    <header class="topbar">
-      <span class="brand">Aliya Cargo</span>
-      <div class="lang-switch" role="group" aria-label="Language">
+  <div class="app-mesh min-h-dvh">
+    <div
+      class="pointer-events-none fixed inset-x-0 top-0 z-40 flex justify-end px-4"
+      :style="{ paddingTop: 'calc(0.75rem + env(safe-area-inset-top, 0px))' }"
+    >
+      <div
+        class="pointer-events-auto ui-glass-strong flex items-center gap-0.5 rounded-full p-1"
+        role="group"
+        aria-label="Language"
+      >
         <button
           v-for="item in availableLocales"
           :key="item.code"
           type="button"
-          class="lang-btn"
-          :class="{ active: locale === item.code }"
+          class="min-w-[40px] rounded-full px-2.5 py-1.5 text-xs font-extrabold tracking-wide transition duration-200"
+          :class="locale === item.code ? 'ui-chip-active' : 'text-muted'"
           :aria-pressed="locale === item.code"
           @click="switchLocale(item.code)"
         >
           {{ item.label }}
         </button>
       </div>
-    </header>
-    <main class="content">
+    </div>
+
+    <main
+      class="min-h-dvh pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))]"
+      :style="{ paddingTop: 'calc(3.25rem + env(safe-area-inset-top, 0px))' }"
+    >
       <slot />
     </main>
   </div>
 </template>
-
-<style scoped>
-.guest-layout {
-  min-height: 100dvh;
-}
-
-.topbar {
-  position: sticky;
-  top: 0;
-  z-index: 50;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 14px 16px;
-  padding-top: calc(14px + env(safe-area-inset-top, 0px));
-  background: var(--tg-theme-secondary-bg-color, #fff);
-  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
-}
-
-.brand {
-  font-size: 17px;
-  font-weight: 700;
-  letter-spacing: -0.2px;
-}
-
-.lang-switch {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  padding: 3px;
-  border-radius: 10px;
-  background: var(--tg-theme-bg-color, #f0f0f0);
-}
-
-.lang-btn {
-  min-width: 40px;
-  padding: 6px 8px;
-  border-radius: 8px;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.3px;
-  color: var(--tg-theme-hint-color, #666);
-  background: transparent;
-}
-
-.lang-btn.active {
-  color: var(--tg-theme-button-text-color, #fff);
-  background: var(--tg-theme-button-color, #3390ec);
-}
-
-.content {
-  min-height: calc(100dvh - 64px);
-}
-</style>
