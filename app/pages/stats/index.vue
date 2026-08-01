@@ -129,8 +129,13 @@ const kpiItems = computed(() => {
     { label: 'Записей', value: stats.value.totalCount },
     { label: 'Клиентов', value: stats.value.customersCount },
     { label: 'Общий вес', value: formatWeight(stats.value.totalWeight) },
-    { label: 'Общая сумма', value: formatPrice(stats.value.totalRevenue), tone: 'accent' as const },
+    { label: 'Начислено', value: formatPrice(stats.value.totalRevenue), tone: 'accent' as const },
   ]
+})
+
+const profitShare = computed(() => {
+  if (!stats.value?.totalRevenue) return 0
+  return Math.round((stats.value.paidRevenue / stats.value.totalRevenue) * 100)
 })
 
 watch(ready, async () => {
@@ -204,7 +209,7 @@ function barHeight(revenue: number) {
 
 <template>
   <div>
-    <PageHeader title="Статистика" show-refresh :refreshing="state === 'loading'" @refresh="load" />
+    <PageHeader title="Склад" subtitle="Складская статистика" show-refresh :refreshing="state === 'loading'" @refresh="load" />
 
     <div
       class="sticky z-30 px-4 pb-3 pt-1"
@@ -244,6 +249,40 @@ function barHeight(revenue: number) {
     <UiError v-else-if="state === 'error'" :message="errorMessage" @retry="load" />
 
     <main v-else-if="stats" class="space-y-4 px-4 pb-6">
+      <section class="ui-card relative overflow-hidden px-4 py-5">
+        <div class="pointer-events-none absolute -right-6 -top-8 h-28 w-28 rounded-full bg-brand/20 blur-2xl" />
+        <div class="pointer-events-none absolute -bottom-10 left-8 h-24 w-24 rounded-full bg-accent/20 blur-2xl" />
+        <p class="relative text-[11px] font-extrabold uppercase tracking-[0.12em] text-brand">Получено</p>
+        <p class="relative mt-1 text-[2rem] font-extrabold leading-none tracking-tight tabular-nums text-ink">
+          {{ formatPrice(stats.paidRevenue) }}
+        </p>
+        <p class="relative mt-2 text-xs font-medium text-muted">
+          Оплачено клиентами · {{ stats.paidCount }} записей · не чистая прибыль
+        </p>
+        <div class="relative mt-4 grid grid-cols-2 gap-2.5">
+          <div class="rounded-[1.15rem] border border-white/60 bg-white/45 px-3 py-2.5">
+            <p class="text-[10px] font-bold uppercase tracking-wide text-muted">Начислено</p>
+            <p class="mt-0.5 text-sm font-extrabold tabular-nums text-ink">{{ formatPrice(stats.totalRevenue) }}</p>
+          </div>
+          <div class="rounded-[1.15rem] border border-white/60 bg-white/45 px-3 py-2.5">
+            <p class="text-[10px] font-bold uppercase tracking-wide text-muted">В долге</p>
+            <p class="mt-0.5 text-sm font-extrabold tabular-nums text-danger">{{ formatPrice(stats.unpaidRevenue) }}</p>
+          </div>
+        </div>
+        <div class="relative mt-3">
+          <div class="mb-1.5 flex items-center justify-between text-[11px] font-bold text-muted">
+            <span>Собрано</span>
+            <span>{{ profitShare }}%</span>
+          </div>
+          <div class="h-2 overflow-hidden rounded-full bg-white/50">
+            <div
+              class="h-full rounded-full bg-gradient-to-r from-teal-400 to-brand transition-all"
+              :style="{ width: `${profitShare}%` }"
+            />
+          </div>
+        </div>
+      </section>
+
       <UiStatGrid :items="kpiItems" />
 
       <section class="ui-card space-y-3 px-4 py-4">

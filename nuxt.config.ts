@@ -35,6 +35,7 @@ export default defineNuxtConfig({
     supabaseUrl: process.env.SUPABASE_URL || process.env.NUXT_SUPABASE_URL || '',
     supabaseServiceKey: process.env.SUPABASE_SERVICE_KEY || process.env.NUXT_SUPABASE_SERVICE_KEY || '',
     pricePerKg: Number(process.env.PRICE_PER_KG) || 1000,
+    costPerKg: Number(process.env.COST_PER_KG) || 25,
     public: {
       appUrl: process.env.NUXT_PUBLIC_APP_URL || '',
     },

@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import type { CustomerGood } from '~/composables/useTelegram'
-import { normalizePhone } from '#shared/utils/phone'
 
 const { initData, ready, haptic } = useTelegram()
 const { apiFetch } = useApi(initData)
@@ -12,7 +11,6 @@ const state = ref<'loading' | 'ok' | 'error'>('loading')
 const errorMessage = ref('')
 const goods = ref<CustomerGood[]>([])
 const loadingGoods = ref(false)
-const exporting = ref(false)
 const toast = ref<{ type: 'success' | 'error', message: string } | null>(null)
 
 const filtersOpen = ref(false)
@@ -76,61 +74,6 @@ function clearFilters() {
   dateTo.value = ''
 }
 
-function buildExportQuery() {
-  const params = new URLSearchParams()
-  if (dateFrom.value) params.set('dateFrom', dateFrom.value)
-  if (dateTo.value) params.set('dateTo', dateTo.value)
-  const qs = params.toString()
-  return qs ? `/api/goods/export?${qs}` : '/api/goods/export'
-}
-
-function phoneTail(phone: string) {
-  return normalizePhone(phone).slice(-4)
-}
-
-function formatExportRows(rows: CustomerGood[]) {
-  return rows
-    .map((item, index) => {
-      return `${index + 1}. ${item.name} — ${phoneTail(item.phone)} — ${item.weight} кг — ${item.price} с.`
-    })
-    .join('\n')
-}
-
-async function copyExport() {
-  exporting.value = true
-  try {
-    if (dateFrom.value && dateTo.value && dateFrom.value > dateTo.value) {
-      throw new Error('Дата начала не может быть позже даты окончания')
-    }
-
-    const rows = await apiFetch<CustomerGood[]>(buildExportQuery())
-    if (!rows.length) throw new Error('За выбранный период записей нет')
-
-    const text = formatExportRows(rows)
-    try {
-      await navigator.clipboard.writeText(text)
-    }
-    catch {
-      const textarea = document.createElement('textarea')
-      textarea.value = text
-      textarea.style.position = 'fixed'
-      textarea.style.opacity = '0'
-      document.body.appendChild(textarea)
-      textarea.select()
-      document.execCommand('copy')
-      textarea.remove()
-    }
-
-    showToast('success', 'Данные скопированы')
-  }
-  catch (e) {
-    showToast('error', e instanceof Error ? e.message : 'Не удалось скопировать')
-  }
-  finally {
-    exporting.value = false
-  }
-}
-
 async function togglePaid(item: CustomerGood) {
   try {
     const updated = await apiFetch<CustomerGood>(`/api/goods/${item.id}`, {
@@ -178,7 +121,7 @@ function showToast(type: 'success' | 'error', message: string) {
     <div class="space-y-3 pb-6">
       <FiltersSheet
         v-model="filtersOpen"
-        title="Фильтры и экспорт"
+        title="Фильтры"
         :active="filtersActive"
         @clear="clearFilters"
       >
@@ -205,13 +148,6 @@ function showToast(type: 'success' | 'error', message: string) {
             <span class="ui-label">Дата по</span>
             <input v-model="dateTo" type="date" class="ui-input">
           </label>
-        </div>
-
-        <div class="rounded-[1.35rem] border border-white/60 bg-white/40 p-3">
-          <p class="mb-2 text-xs font-medium text-muted">Экспорт за выбранный период</p>
-          <button type="button" class="ui-btn-primary w-full py-3 text-sm" :disabled="exporting" @click="copyExport">
-            {{ exporting ? 'Копирование…' : 'Копировать список' }}
-          </button>
         </div>
 
         <button

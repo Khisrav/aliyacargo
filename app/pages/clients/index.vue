@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { formatPhone } from '#shared/utils/phone'
+import { formatPhone, normalizePhone } from '#shared/utils/phone'
 
 interface CustomerListItem {
   id: number
@@ -14,7 +14,7 @@ interface CustomerListItem {
   lastActivityAt: string | null
 }
 
-const { initData, ready } = useTelegram()
+const { initData, ready, haptic } = useTelegram()
 const { apiFetch } = useApi(initData)
 const { requireWorker } = useWorkerGate()
 const { confirm } = useConfirm()
@@ -31,6 +31,7 @@ const activityFrom = ref('')
 const activityTo = ref('')
 const minGoods = ref('')
 const sort = ref<'name' | 'debt' | 'revenue' | 'goods' | 'recent'>('name')
+const exporting = ref(false)
 
 const filtersActive = computed(() =>
   search.value.trim().length > 0
@@ -61,21 +62,24 @@ watch(search, () => {
   }, 300)
 })
 
+function buildQuery() {
+  const params = new URLSearchParams()
+  if (search.value.trim()) params.set('search', search.value.trim())
+  if (debtFilter.value !== 'all') params.set('debt', debtFilter.value)
+  if (activityFrom.value) params.set('activityFrom', activityFrom.value)
+  if (activityTo.value) params.set('activityTo', activityTo.value)
+  if (minGoods.value) params.set('minGoods', minGoods.value)
+  if (sort.value !== 'name') params.set('sort', sort.value)
+  const qs = params.toString()
+  return qs ? `/api/customers?${qs}` : '/api/customers'
+}
+
 async function load() {
   if (!ready.value) return
 
   state.value = state.value === 'ok' ? 'ok' : 'loading'
   try {
-    const params = new URLSearchParams()
-    if (search.value.trim()) params.set('search', search.value.trim())
-    if (debtFilter.value !== 'all') params.set('debt', debtFilter.value)
-    if (activityFrom.value) params.set('activityFrom', activityFrom.value)
-    if (activityTo.value) params.set('activityTo', activityTo.value)
-    if (minGoods.value) params.set('minGoods', minGoods.value)
-    if (sort.value !== 'name') params.set('sort', sort.value)
-
-    const qs = params.toString()
-    customers.value = await apiFetch<CustomerListItem[]>(qs ? `/api/customers?${qs}` : '/api/customers')
+    customers.value = await apiFetch<CustomerListItem[]>(buildQuery())
     state.value = 'ok'
   }
   catch (e) {
@@ -95,7 +99,61 @@ function clearFilters() {
 
 function showToast(type: 'success' | 'error', message: string) {
   toast.value = { type, message }
+  haptic(type)
   setTimeout(() => { toast.value = null }, 2500)
+}
+
+function phoneTail(phone: string) {
+  return normalizePhone(phone).slice(-4)
+}
+
+function formatExportRows(rows: CustomerListItem[]) {
+  return rows
+    .map((item, index) => {
+      return `${index + 1}. ${item.name} — ${phoneTail(item.phone)} — ${item.totalWeight} кг — ${item.totalRevenue} с.`
+    })
+    .join('\n')
+}
+
+async function copyToClipboard(text: string) {
+  try {
+    await navigator.clipboard.writeText(text)
+  }
+  catch {
+    const textarea = document.createElement('textarea')
+    textarea.value = text
+    textarea.style.position = 'fixed'
+    textarea.style.opacity = '0'
+    document.body.appendChild(textarea)
+    textarea.select()
+    document.execCommand('copy')
+    textarea.remove()
+  }
+}
+
+async function copyExport() {
+  if (exporting.value) return
+  exporting.value = true
+  try {
+    if (activityFrom.value && activityTo.value && activityFrom.value > activityTo.value) {
+      throw new Error('Дата «с» не может быть позже даты «по»')
+    }
+
+    const rows = customers.value.length
+      ? customers.value
+      : await apiFetch<CustomerListItem[]>(buildQuery())
+
+    if (!rows.length) throw new Error('По выбранным фильтрам клиентов нет')
+
+    await copyToClipboard(formatExportRows(rows))
+    showToast('success', `Скопировано: ${rows.length}`)
+  }
+  catch (e) {
+    showToast('error', e instanceof Error ? e.message : 'Не удалось скопировать')
+  }
+  finally {
+    exporting.value = false
+  }
 }
 
 async function removeCustomer(customer: CustomerListItem, event: Event) {
@@ -159,11 +217,11 @@ async function removeCustomer(customer: CustomerListItem, event: Event) {
 
         <div class="grid grid-cols-2 gap-3">
           <label class="ui-field">
-            <span class="ui-label">Активность с</span>
+            <span class="ui-label">Период с</span>
             <input v-model="activityFrom" type="date" class="ui-input">
           </label>
           <label class="ui-field">
-            <span class="ui-label">Активность по</span>
+            <span class="ui-label">Период по</span>
             <input v-model="activityTo" type="date" class="ui-input">
           </label>
         </div>
@@ -172,6 +230,15 @@ async function removeCustomer(customer: CustomerListItem, event: Event) {
           <span class="ui-label">Мин. записей</span>
           <input v-model="minGoods" type="number" min="0" inputmode="numeric" placeholder="0" class="ui-input">
         </label>
+
+        <div class="rounded-[1.35rem] border border-white/60 bg-white/40 p-3">
+          <p class="mb-2 text-xs font-medium text-muted">
+            Копирует текущую выборку: один клиент — одна строка (вес и сумма сгруппированы).
+          </p>
+          <button type="button" class="ui-btn-primary w-full py-3 text-sm" :disabled="exporting || state !== 'ok'" @click="copyExport">
+            {{ exporting ? 'Копирование…' : 'Копировать список' }}
+          </button>
+        </div>
 
         <button
           v-if="filtersActive"
@@ -184,14 +251,24 @@ async function removeCustomer(customer: CustomerListItem, event: Event) {
       </FiltersSheet>
 
       <div class="px-4">
+        <div v-if="state === 'ok'" class="mb-3 flex items-center justify-between gap-3 px-1">
+          <p class="text-xs font-medium text-muted">
+            Найдено: {{ customers.length }}
+          </p>
+          <button
+            type="button"
+            class="ui-chip text-brand"
+            :disabled="exporting || !customers.length"
+            @click="copyExport"
+          >
+            {{ exporting ? '…' : 'Копировать' }}
+          </button>
+        </div>
+
         <UiSpinner v-if="state === 'loading'" />
         <UiError v-else-if="state === 'error'" :message="errorMessage" @retry="load" />
 
         <template v-else>
-          <p class="mb-3 px-1 text-xs font-medium text-muted">
-            Найдено: {{ customers.length }}
-          </p>
-
           <ul v-if="customers.length" class="space-y-2">
             <li v-for="customer in customers" :key="customer.id" class="relative">
               <NuxtLink

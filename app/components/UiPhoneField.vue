@@ -13,6 +13,7 @@ const emit = defineEmits<{
   'update:modelValue': [value: string]
   input: [e: Event]
   enter: []
+  focus: []
   blur: []
 }>()
 
@@ -43,6 +44,7 @@ defineExpose({
         class="w-full border-0 bg-transparent py-3.5 text-[22px] font-extrabold tracking-wider text-ink tabular-nums placeholder:font-semibold placeholder:tracking-normal placeholder:text-slate-300 focus:outline-none"
         @input="emit('input', $event); emit('update:modelValue', ($event.target as HTMLInputElement).value)"
         @keydown.enter.prevent="emit('enter')"
+        @focus="emit('focus')"
         @blur="emit('blur')"
       >
     </div>

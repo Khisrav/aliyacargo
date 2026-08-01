@@ -7,6 +7,7 @@ const { apiFetch } = useApi(initData)
 const { requireWorker } = useWorkerGate()
 const { confirm } = useConfirm()
 const { formatPrice, formatWeight, formatDateTime } = useFormatters()
+const { setTabBarHidden } = useTabBar()
 
 const authState = ref<'loading' | 'ok' | 'denied' | 'error'>('loading')
 const authError = ref('')
@@ -28,6 +29,29 @@ const nameRef = ref<HTMLInputElement>()
 const weightRef = ref<HTMLInputElement>()
 
 let phoneLookupToken = 0
+let blurHideTimer: ReturnType<typeof setTimeout> | undefined
+
+function onFieldFocus() {
+  if (blurHideTimer) {
+    clearTimeout(blurHideTimer)
+    blurHideTimer = undefined
+  }
+  setTabBarHidden(true)
+}
+
+function onFieldBlur() {
+  if (blurHideTimer) clearTimeout(blurHideTimer)
+  blurHideTimer = setTimeout(() => {
+    const active = document.activeElement as HTMLElement | null
+    if (active?.closest('[data-weigh-form]')) return
+    setTabBarHidden(false)
+  }, 120)
+}
+
+onUnmounted(() => {
+  if (blurHideTimer) clearTimeout(blurHideTimer)
+  setTabBarHidden(false)
+})
 
 const phoneDigits = computed(() => normalizePhone(phone.value))
 const weightNum = computed(() => parseFloat(weight.value.replace(',', '.')) || 0)
@@ -194,6 +218,11 @@ function onPhoneEnter() {
   }
 }
 
+function onPhoneBlur() {
+  lookupCustomer()
+  onFieldBlur()
+}
+
 function onNameEnter() {
   weightRef.value?.focus()
 }
@@ -227,8 +256,8 @@ function onWeightEnter() {
         </template>
       </PageHeader>
 
-      <div class="animate-fade-up space-y-4 px-4 pb-32">
-        <section class="ui-card space-y-4 p-5">
+      <div class="animate-fade-up space-y-4 px-4 pb-8">
+        <section data-weigh-form class="ui-card space-y-4 p-5">
           <UiPhoneField
             ref="phoneField"
             :model-value="phone"
@@ -238,7 +267,8 @@ function onWeightEnter() {
             :found="nameLocked"
             @input="onPhoneInput"
             @enter="onPhoneEnter"
-            @blur="lookupCustomer"
+            @focus="onFieldFocus"
+            @blur="onPhoneBlur"
           />
 
           <label class="ui-field">
@@ -252,6 +282,8 @@ function onWeightEnter() {
               enterkeyhint="next"
               placeholder="Полное имя"
               class="ui-input"
+              @focus="onFieldFocus"
+              @blur="onFieldBlur"
               @keydown.enter.prevent="onNameEnter"
             >
           </label>
@@ -267,6 +299,8 @@ function onWeightEnter() {
               enterkeyhint="done"
               placeholder="0.0"
               class="ui-input text-center text-[28px] font-extrabold tabular-nums"
+              @focus="onFieldFocus"
+              @blur="onFieldBlur"
               @input="onWeightInput"
               @keydown.enter.prevent="onWeightEnter"
             >
@@ -279,6 +313,16 @@ function onWeightEnter() {
             <span class="text-sm font-bold text-brand-dark/70">Цена</span>
             <span class="text-xl font-extrabold tabular-nums text-brand-dark">{{ formatPrice(calculatedPrice) }}</span>
           </div>
+
+          <button
+            type="button"
+            class="ui-btn-primary w-full"
+            :class="{ 'opacity-100': canSubmit, 'opacity-40': !canSubmit }"
+            :disabled="!canSubmit"
+            @click="submit"
+          >
+            {{ submitting ? 'Сохранение…' : 'Сохранить и далее' }}
+          </button>
         </section>
 
         <section v-if="sessionGoods.length" class="space-y-2.5">
@@ -301,21 +345,6 @@ function onWeightEnter() {
         </section>
 
         <UiEmpty v-else message="Записей в этой сессии пока нет. Добавьте первую выше." />
-      </div>
-
-      <div
-        class="pointer-events-none fixed inset-x-0 z-40 px-4"
-        :style="{ bottom: 'calc(5.85rem + env(safe-area-inset-bottom, 0px))' }"
-      >
-        <button
-          type="button"
-          class="pointer-events-auto ui-btn-primary w-full"
-          :class="{ 'opacity-100': canSubmit, 'opacity-40': !canSubmit }"
-          :disabled="!canSubmit"
-          @click="submit"
-        >
-          {{ submitting ? 'Сохранение…' : 'Сохранить и далее' }}
-        </button>
       </div>
 
       <UiToast :toast="toast" />

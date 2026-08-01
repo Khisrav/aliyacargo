@@ -30,4 +30,10 @@ export async function purgeExpiredTrash(supabase: SupabaseClient) {
     .delete()
     .not('deleted_at', 'is', null)
     .lt('deleted_at', cutoff)
+
+  await supabase
+    .from('finance_records')
+    .delete()
+    .not('deleted_at', 'is', null)
+    .lt('deleted_at', cutoff)
 }

@@ -2,6 +2,8 @@
 defineProps<{
   toast: { type: 'success' | 'error', message: string } | null
 }>()
+
+const { tabBarHidden } = useTabBar()
 </script>
 
 <template>
@@ -9,13 +11,17 @@ defineProps<{
     <Transition name="toast">
       <div
         v-if="toast"
-        class="pointer-events-none fixed inset-x-4 z-[100] rounded-[1.35rem] px-4 py-3.5 text-center text-[15px] font-extrabold text-white shadow-toast backdrop-blur-md"
+        class="pointer-events-none fixed inset-x-4 z-[100] rounded-[1.35rem] px-4 py-3.5 text-center text-[15px] font-extrabold text-white shadow-toast backdrop-blur-md transition-[bottom] duration-200"
         :class="[
           toast.type === 'success'
             ? 'bg-gradient-to-br from-emerald-400/95 to-success'
             : 'bg-gradient-to-br from-rose-400/95 to-danger',
-          'bottom-[calc(6.75rem+env(safe-area-inset-bottom,0px))]',
         ]"
+        :style="{
+          bottom: tabBarHidden
+            ? 'calc(1.25rem + env(safe-area-inset-bottom, 0px))'
+            : 'calc(6.75rem + env(safe-area-inset-bottom, 0px))',
+        }"
       >
         {{ toast.message }}
       </div>

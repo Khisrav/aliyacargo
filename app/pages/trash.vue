@@ -25,10 +25,23 @@ interface TrashCustomer {
   daysLeft: number
 }
 
+interface TrashFinance {
+  id: number
+  type: 'finance'
+  recordType: 'income' | 'expense'
+  amount: number
+  note: string
+  created_by: string | null
+  created_at: string
+  deleted_at: string
+  daysLeft: number
+}
+
 interface TrashResponse {
   retentionDays: number
   goods: TrashGood[]
   customers: TrashCustomer[]
+  finance: TrashFinance[]
 }
 
 const { initData, ready, haptic } = useTelegram()
@@ -42,7 +55,7 @@ const errorMessage = ref('')
 const trash = ref<TrashResponse | null>(null)
 const toast = ref<{ type: 'success' | 'error', message: string } | null>(null)
 const busyId = ref<string | null>(null)
-const segment = ref<'customers' | 'goods'>('customers')
+const segment = ref<'customers' | 'goods' | 'finance'>('customers')
 
 watch(ready, async () => {
   if (!ready.value) return
@@ -109,6 +122,27 @@ async function restoreCustomer(item: TrashCustomer) {
     busyId.value = null
   }
 }
+
+async function restoreFinance(item: TrashFinance) {
+  const ok = await confirm({
+    title: 'Восстановить запись?',
+    message: `«${item.note}» вернётся в финансы.`,
+    confirmLabel: 'Восстановить',
+  })
+  if (!ok) return
+  busyId.value = `finance-${item.id}`
+  try {
+    await apiFetch(`/api/trash/finance/${item.id}`, { method: 'POST' })
+    showToast('success', 'Финансовая запись восстановлена')
+    await load()
+  }
+  catch (e) {
+    showToast('error', e instanceof Error ? e.message : 'Не удалось восстановить')
+  }
+  finally {
+    busyId.value = null
+  }
+}
 </script>
 
 <template>
@@ -121,10 +155,10 @@ async function restoreCustomer(item: TrashCustomer) {
     />
 
     <div class="px-4 pb-3">
-      <div class="ui-glass-strong grid grid-cols-2 gap-1 rounded-blob p-1.5">
+      <div class="ui-glass-strong grid grid-cols-3 gap-1 rounded-blob p-1.5">
         <button
           type="button"
-          class="rounded-full py-2.5 text-sm font-extrabold transition duration-200 ease-expressive"
+          class="rounded-full py-2.5 text-xs font-extrabold transition duration-200 ease-expressive"
           :class="segment === 'customers' ? 'ui-chip-active' : 'text-muted'"
           @click="segment = 'customers'"
         >
@@ -133,12 +167,21 @@ async function restoreCustomer(item: TrashCustomer) {
         </button>
         <button
           type="button"
-          class="rounded-full py-2.5 text-sm font-extrabold transition duration-200 ease-expressive"
+          class="rounded-full py-2.5 text-xs font-extrabold transition duration-200 ease-expressive"
           :class="segment === 'goods' ? 'ui-chip-active' : 'text-muted'"
           @click="segment = 'goods'"
         >
-          Записи
+          Груз
           <span v-if="trash" class="opacity-80">({{ trash.goods.length }})</span>
+        </button>
+        <button
+          type="button"
+          class="rounded-full py-2.5 text-xs font-extrabold transition duration-200 ease-expressive"
+          :class="segment === 'finance' ? 'ui-chip-active' : 'text-muted'"
+          @click="segment = 'finance'"
+        >
+          Финансы
+          <span v-if="trash" class="opacity-80">({{ trash.finance.length }})</span>
         </button>
       </div>
     </div>
@@ -195,6 +238,31 @@ async function restoreCustomer(item: TrashCustomer) {
           </li>
         </ul>
         <UiEmpty v-else-if="segment === 'goods'" message="Нет удалённых записей" />
+
+        <ul v-if="segment === 'finance' && trash.finance.length" class="space-y-2">
+          <li v-for="item in trash.finance" :key="`f-${item.id}`" class="ui-card flex items-center gap-3 px-4 py-3.5">
+            <div class="min-w-0 flex-1">
+              <p class="truncate text-[15px] font-bold text-ink">{{ item.note }}</p>
+              <p class="mt-0.5 text-xs text-muted">
+                {{ item.recordType === 'income' ? 'Доход' : 'Расход' }}
+                · {{ formatPrice(item.amount) }}
+                · {{ formatDateTime(item.deleted_at) }}
+              </p>
+              <span class="mt-1.5 inline-flex rounded-lg bg-accent-soft px-2 py-0.5 text-[11px] font-bold text-amber-800">
+                {{ item.daysLeft }} дн.
+              </span>
+            </div>
+            <button
+              type="button"
+              class="shrink-0 rounded-xl bg-brand-soft px-3 py-2 text-xs font-bold text-brand"
+              :disabled="busyId === `finance-${item.id}`"
+              @click="restoreFinance(item)"
+            >
+              Восстановить
+            </button>
+          </li>
+        </ul>
+        <UiEmpty v-else-if="segment === 'finance'" message="Нет удалённых финансовых записей" />
       </template>
     </main>
 

@@ -57,11 +57,22 @@ export default defineEventHandler(async (event) => {
   }
 
   const ids = list.map(c => c.id)
-  const { data: goods, error: goodsError } = await supabase
+  let goodsQuery = supabase
     .from('goods')
     .select('customer_id, weight, price, has_paid, created_at')
     .in('customer_id', ids)
     .is('deleted_at', null)
+
+  // When an activity period is set, aggregate only goods inside that window
+  // so list totals and clipboard export match the selected period.
+  if (activityFrom) {
+    goodsQuery = goodsQuery.gte('created_at', `${activityFrom}T00:00:00.000Z`)
+  }
+  if (activityTo) {
+    goodsQuery = goodsQuery.lte('created_at', `${activityTo}T23:59:59.999Z`)
+  }
+
+  const { data: goods, error: goodsError } = await goodsQuery
 
   if (goodsError) {
     throw createError({ statusCode: 500, statusMessage: goodsError.message })
@@ -135,14 +146,10 @@ export default defineEventHandler(async (event) => {
     result = result.filter(c => c.goodsCount >= minGoods)
   }
 
-  if (activityFrom) {
-    const from = `${activityFrom}T00:00:00.000Z`
-    result = result.filter(c => c.lastActivityAt && c.lastActivityAt >= from)
-  }
-
-  if (activityTo) {
-    const to = `${activityTo}T23:59:59.999Z`
-    result = result.filter(c => c.lastActivityAt && c.lastActivityAt <= to)
+  // Period selected: keep clients who have goods in that window
+  // (stats already scoped above). Also drop zero-activity rows.
+  if (activityFrom || activityTo) {
+    result = result.filter(c => c.goodsCount > 0)
   }
 
   result.sort((a, b) => {
