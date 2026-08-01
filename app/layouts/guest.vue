@@ -1,10 +1,16 @@
 <script setup lang="ts">
 const { locale, locales, setLocale } = useI18n()
 
+const localeLabels: Record<string, string> = {
+  ru: 'RU',
+  tg: 'TJ',
+  uz: 'UZ',
+}
+
 const availableLocales = computed(() =>
   locales.value.map(item => typeof item === 'string'
-    ? { code: item, name: item }
-    : { code: item.code, name: item.name ?? item.code }),
+    ? { code: item, label: localeLabels[item] ?? item.toUpperCase() }
+    : { code: item.code, label: localeLabels[item.code] ?? item.code.toUpperCase() }),
 )
 
 async function switchLocale(code: string) {
@@ -27,7 +33,7 @@ async function switchLocale(code: string) {
           :aria-pressed="locale === item.code"
           @click="switchLocale(item.code)"
         >
-          {{ item.code.toUpperCase() }}
+          {{ item.label }}
         </button>
       </div>
     </header>

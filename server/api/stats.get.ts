@@ -2,7 +2,7 @@ import { createError, getQuery } from 'h3'
 import { requireTelegramAuth } from '../utils/auth'
 import { GOODS_SELECT, mapGoodRow, useSupabaseAdmin } from '../utils/supabase'
 
-type Period = 'today' | 'yesterday' | 'week' | 'month' | 'all'
+type Period = 'today' | 'yesterday' | 'week' | 'month' | 'all' | 'custom'
 
 interface DayBucket {
   date: string
@@ -21,7 +21,9 @@ interface TopCustomer {
   unpaidRevenue: number
 }
 
-const PERIODS = new Set<Period>(['today', 'yesterday', 'week', 'month', 'all'])
+const PERIODS = new Set<Period>(['today', 'yesterday', 'week', 'month', 'all', 'custom'])
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+const MAX_CHART_DAYS = 62
 
 function dateKey(d: Date) {
   return d.toISOString().slice(0, 10)
@@ -51,8 +53,42 @@ function startOfMonth(d: Date) {
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1))
 }
 
-function resolvePeriod(period: Period): { from: Date | null, to: Date | null } {
+function parseDateParam(value: unknown, label: string): Date | null {
+  if (value == null || value === '') return null
+  if (typeof value !== 'string' || !DATE_RE.test(value)) {
+    throw createError({ statusCode: 400, statusMessage: `Invalid ${label}` })
+  }
+  const parsed = new Date(`${value}T00:00:00.000Z`)
+  if (Number.isNaN(parsed.getTime())) {
+    throw createError({ statusCode: 400, statusMessage: `Invalid ${label}` })
+  }
+  return parsed
+}
+
+function resolvePeriod(
+  period: Period,
+  dateFromRaw: unknown,
+  dateToRaw: unknown,
+): { from: Date | null, to: Date | null } {
   const now = new Date()
+
+  if (period === 'custom') {
+    const fromDate = parseDateParam(dateFromRaw, 'dateFrom')
+    const toDate = parseDateParam(dateToRaw, 'dateTo')
+
+    if (!fromDate && !toDate) {
+      throw createError({ statusCode: 400, statusMessage: 'dateFrom or dateTo is required for custom period' })
+    }
+
+    const from = fromDate ? startOfDay(fromDate) : null
+    const to = toDate ? endOfDay(toDate) : endOfDay(now)
+
+    if (from && to && from > to) {
+      throw createError({ statusCode: 400, statusMessage: 'dateFrom must be before dateTo' })
+    }
+
+    return { from, to }
+  }
 
   switch (period) {
     case 'today':
@@ -74,8 +110,14 @@ function resolvePeriod(period: Period): { from: Date | null, to: Date | null } {
 
 function buildDailyBuckets(from: Date, to: Date): DayBucket[] {
   const buckets: DayBucket[] = []
-  const cursor = startOfDay(from)
+  let cursor = startOfDay(from)
   const end = startOfDay(to)
+
+  const daySpan = Math.round((end.getTime() - cursor.getTime()) / 86_400_000) + 1
+  if (daySpan > MAX_CHART_DAYS) {
+    cursor = new Date(end)
+    cursor.setUTCDate(cursor.getUTCDate() - (MAX_CHART_DAYS - 1))
+  }
 
   while (cursor <= end) {
     buckets.push({ date: dateKey(cursor), count: 0, weight: 0, revenue: 0 })
@@ -91,7 +133,7 @@ export default defineEventHandler(async (event) => {
   const query = getQuery(event)
   const rawPeriod = typeof query.period === 'string' ? query.period : 'all'
   const period: Period = PERIODS.has(rawPeriod as Period) ? (rawPeriod as Period) : 'all'
-  const { from, to } = resolvePeriod(period)
+  const { from, to } = resolvePeriod(period, query.dateFrom, query.dateTo)
 
   const supabase = useSupabaseAdmin()
   let goodsQuery = supabase

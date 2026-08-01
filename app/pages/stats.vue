@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { formatPhone } from '#shared/utils/phone'
 
-type Period = 'today' | 'yesterday' | 'week' | 'month' | 'all'
+type Period = 'today' | 'yesterday' | 'week' | 'month' | 'all' | 'custom'
 
 interface DayBucket {
   date: string
@@ -47,12 +47,33 @@ interface StatsResponse {
 }
 
 const PERIOD_OPTIONS: { value: Period, label: string }[] = [
+  { value: 'custom', label: 'Свой' },
   { value: 'today', label: 'Сегодня' },
   { value: 'yesterday', label: 'Вчера' },
   { value: 'week', label: 'Неделя' },
   { value: 'month', label: 'Месяц' },
   { value: 'all', label: 'Всё время' },
 ]
+
+function todayKey() {
+  return new Date().toISOString().slice(0, 10)
+}
+
+function monthStartKey() {
+  const d = new Date()
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1)).toISOString().slice(0, 10)
+}
+
+function formatRangeLabel(from: string | null, to: string | null) {
+  const fmt = (value: string) => {
+    const d = new Date(`${value}T00:00:00`)
+    return d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  }
+  if (from && to) return `${fmt(from)} – ${fmt(to)}`
+  if (from) return `с ${fmt(from)}`
+  if (to) return `по ${fmt(to)}`
+  return 'Свой период'
+}
 
 const { initData, ready } = useTelegram()
 const { apiFetch } = useApi(initData)
@@ -62,6 +83,10 @@ const state = ref<'loading' | 'ok' | 'error'>('loading')
 const errorMessage = ref('')
 const stats = ref<StatsResponse | null>(null)
 const period = ref<Period>('month')
+const dateFrom = ref(monthStartKey())
+const dateTo = ref(todayKey())
+const dateError = ref('')
+const skipDateWatch = ref(false)
 
 const maxDailyRevenue = computed(() => {
   if (!stats.value) return 0
@@ -80,6 +105,8 @@ const chartTitle = computed(() => {
       return 'Этот месяц'
     case 'all':
       return 'Последние 14 дней'
+    case 'custom':
+      return formatRangeLabel(stats.value?.periodFrom ?? dateFrom.value, stats.value?.periodTo ?? dateTo.value)
   }
 })
 
@@ -88,22 +115,56 @@ const chartEmptyText = computed(() => {
   return 'За выбранный период записей нет'
 })
 
+const customDatesValid = computed(() => {
+  if (!dateFrom.value && !dateTo.value) return false
+  if (dateFrom.value && dateTo.value && dateFrom.value > dateTo.value) return false
+  return true
+})
+
 watch(ready, async () => {
   if (!ready.value) return
   if (!(await requireWorker())) return
   await load()
 }, { immediate: true })
 
-watch(period, () => {
-  if (ready.value) load()
+watch(period, async (value) => {
+  if (!ready.value) return
+
+  if (value === 'custom') {
+    skipDateWatch.value = true
+    if (!dateFrom.value) dateFrom.value = monthStartKey()
+    if (!dateTo.value) dateTo.value = todayKey()
+    await nextTick()
+    skipDateWatch.value = false
+  }
+
+  await load()
+})
+
+watch([dateFrom, dateTo], () => {
+  if (skipDateWatch.value || period.value !== 'custom' || !ready.value) return
+  dateError.value = ''
+  if (!customDatesValid.value) {
+    if (dateFrom.value && dateTo.value && dateFrom.value > dateTo.value) {
+      dateError.value = 'Дата «с» не может быть позже даты «по»'
+    }
+    return
+  }
+  load()
 })
 
 async function load() {
   if (!ready.value) return
+  if (period.value === 'custom' && !customDatesValid.value) return
 
   state.value = 'loading'
+  dateError.value = ''
   try {
     const params = new URLSearchParams({ period: period.value })
+    if (period.value === 'custom') {
+      if (dateFrom.value) params.set('dateFrom', dateFrom.value)
+      if (dateTo.value) params.set('dateTo', dateTo.value)
+    }
     stats.value = await apiFetch<StatsResponse>(`/api/stats?${params}`)
     state.value = 'ok'
   }
@@ -163,6 +224,20 @@ function barHeight(revenue: number) {
       >
         {{ option.label }}
       </button>
+    </div>
+
+    <div v-if="period === 'custom'" class="custom-range">
+      <div class="filter-row two">
+        <label class="field">
+          <span class="label">Дата с</span>
+          <input v-model="dateFrom" type="date">
+        </label>
+        <label class="field">
+          <span class="label">Дата по</span>
+          <input v-model="dateTo" type="date">
+        </label>
+      </div>
+      <p v-if="dateError" class="date-error">{{ dateError }}</p>
     </div>
 
     <div v-if="state === 'loading'" class="screen center">
@@ -417,6 +492,57 @@ function barHeight(revenue: number) {
 .period-chip.active {
   background: var(--tg-theme-button-color, #3390ec);
   color: var(--tg-theme-button-text-color, #fff);
+}
+
+.custom-range {
+  padding: 0 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.filter-row {
+  display: flex;
+  gap: 12px;
+}
+
+.filter-row.two > .field {
+  flex: 1;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--tg-theme-hint-color, #666);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.field input {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 2px solid transparent;
+  background: var(--tg-theme-secondary-bg-color, #eee);
+  color: var(--tg-theme-text-color, #333);
+  font-size: 14px;
+}
+
+.field input:focus {
+  border-color: var(--tg-theme-button-color, #3390ec);
+  outline: none;
+}
+
+.date-error {
+  margin: 0;
+  font-size: 13px;
+  color: #dc2626;
 }
 
 .main {
