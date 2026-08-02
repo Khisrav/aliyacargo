@@ -16,6 +16,8 @@ interface FinanceStatsResponse {
   pricePerKg: number
   costPerKg: number
   marginPerKg: number
+  goodsCount: number
+  totalWeight: number
   paidCount: number
   paidWeight: number
   cargoRevenue: number
@@ -207,7 +209,7 @@ function selectPeriod(value: Period) {
             <span class="font-extrabold tabular-nums text-success">+{{ formatPrice(stats.cargoRevenue) }}</span>
           </div>
           <div class="flex justify-between gap-3">
-            <span class="text-muted">Себестоимость ({{ formatWeight(stats.paidWeight) }} × {{ formatPrice(stats.costPerKg) }})</span>
+            <span class="text-muted">Себестоимость ({{ formatWeight(stats.totalWeight) }} × {{ formatPrice(stats.costPerKg) }})</span>
             <span class="font-extrabold tabular-nums text-danger">−{{ formatPrice(stats.cargoCost) }}</span>
           </div>
           <div class="flex justify-between gap-3 border-t border-white/50 pt-2">
@@ -216,7 +218,7 @@ function selectPeriod(value: Period) {
           </div>
         </div>
         <p class="text-xs text-muted">
-          {{ stats.paidCount }} оплаченных записей · цена {{ formatPrice(stats.pricePerKg) }}/кг · себестоимость {{ formatPrice(stats.costPerKg) }}/кг
+          {{ formatWeight(stats.totalWeight) }} всего · {{ stats.paidCount }}/{{ stats.goodsCount }} оплачено · {{ formatPrice(stats.pricePerKg) }}/кг · себест. {{ formatPrice(stats.costPerKg) }}/кг
         </p>
       </section>
 

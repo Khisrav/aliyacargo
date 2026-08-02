@@ -18,7 +18,7 @@ const { initData, ready, haptic } = useTelegram()
 const { apiFetch } = useApi(initData)
 const { requireWorker } = useWorkerGate()
 const { confirm } = useConfirm()
-const { formatPrice, formatWeight, formatDate } = useFormatters()
+const { formatPrice, formatWeight, formatNumber, formatDate } = useFormatters()
 
 const state = ref<'loading' | 'ok' | 'error'>('loading')
 const errorMessage = ref('')
@@ -110,7 +110,9 @@ function phoneTail(phone: string) {
 function formatExportRows(rows: CustomerListItem[]) {
   return rows
     .map((item, index) => {
-      return `${index + 1}. ${item.name} — ${phoneTail(item.phone)} — ${item.totalWeight} кг — ${item.totalRevenue} с.`
+      const weight = formatNumber(item.totalWeight, 1)
+      const revenue = formatNumber(item.totalRevenue, 0)
+      return `${index + 1}. ${item.name} — ${phoneTail(item.phone)} — ${weight} кг — ${revenue} с.`
     })
     .join('\n')
 }

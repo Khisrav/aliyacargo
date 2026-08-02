@@ -128,7 +128,12 @@ export default defineEventHandler(async (event) => {
       phone: customer.phone,
       name: customer.name,
       created_at: customer.created_at,
-      ...stats,
+      goodsCount: stats.goodsCount,
+      totalWeight: Math.round(stats.totalWeight * 1000) / 1000,
+      totalRevenue: Math.round(stats.totalRevenue * 100) / 100,
+      unpaidCount: stats.unpaidCount,
+      unpaidRevenue: Math.round(stats.unpaidRevenue * 100) / 100,
+      lastActivityAt: stats.lastActivityAt,
     }
   })
 

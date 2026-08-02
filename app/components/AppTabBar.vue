@@ -28,12 +28,14 @@ const moreLinks = [
   { to: '/stats', label: 'Склад', desc: 'KPI, долги, график', icon: 'warehouse' },
   { to: '/stats/finance', label: 'Финансы', desc: 'Чистая прибыль', icon: 'finance' },
   { to: '/finance', label: 'Записи финансов', desc: 'Доходы и расходы', icon: 'ledger' },
+  { to: '/reports', label: 'Отчёты', desc: 'Ежедневные сводки', icon: 'report' },
   { to: '/trash', label: 'Корзина', desc: 'Восстановление записей', icon: 'trash' },
 ] as const
 
 const moreActive = computed(() =>
   route.path.startsWith('/stats')
   || route.path.startsWith('/finance')
+  || route.path.startsWith('/reports')
   || route.path.startsWith('/trash'),
 )
 
@@ -123,7 +125,7 @@ watch(() => route.fullPath, () => {
         <span
           class="flex h-11 w-11 items-center justify-center rounded-2xl"
           :class="{
-            'bg-gradient-to-br from-teal-300 to-brand text-white shadow-[0_8px_18px_rgba(13,148,136,0.28)]': link.icon === 'warehouse' || link.icon === 'finance',
+            'bg-gradient-to-br from-teal-300 to-brand text-white shadow-[0_8px_18px_rgba(13,148,136,0.28)]': link.icon === 'warehouse' || link.icon === 'finance' || link.icon === 'report',
             'bg-gradient-to-br from-amber-200 to-accent text-ink shadow-[0_8px_18px_rgba(245,158,11,0.28)]': link.icon === 'ledger' || link.icon === 'trash',
           }"
         >
@@ -143,6 +145,12 @@ watch(() => route.fullPath, () => {
             <path d="M14 2v6h6" />
             <path d="M8 13h8" />
             <path d="M8 17h5" />
+          </svg>
+          <svg v-else-if="link.icon === 'report'" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" />
+            <rect x="9" y="3" width="6" height="4" rx="1" />
+            <path d="M9 12h6" />
+            <path d="M9 16h4" />
           </svg>
           <svg v-else width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
             <path d="M3 6h18" />

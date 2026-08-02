@@ -19,11 +19,11 @@ export default defineEventHandler(async (event) => {
 
   const supabase = useSupabaseAdmin()
 
+  // All packages: 3rd-party border cost applies to every kg, not only customer-paid
   let goodsQuery = supabase
     .from('goods')
     .select(GOODS_SELECT)
     .is('deleted_at', null)
-    .eq('has_paid', true)
     .limit(5000)
 
   let financeQuery = supabase
@@ -56,15 +56,19 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 500, statusMessage: financeError.message })
   }
 
-  const paidGoods = (goodsData ?? [])
+  const allGoods = (goodsData ?? [])
     .filter((row: any) => !row.customers?.deleted_at)
     .map(mapGoodRow)
 
-  const paidWeight = paidGoods.reduce((sum, r) => sum + r.weight, 0)
-  // Paid goods = revenue/income
+  const paidGoods = allGoods.filter(r => r.has_paid)
+
+  const totalWeight = Math.round(allGoods.reduce((sum, r) => sum + r.weight, 0) * 1000) / 1000
+  const paidWeight = Math.round(paidGoods.reduce((sum, r) => sum + r.weight, 0) * 1000) / 1000
+
+  // Customer payments = income
   const cargoRevenue = Math.round(paidGoods.reduce((sum, r) => sum + r.price, 0) * 100) / 100
-  // Cost of those paid goods = expense
-  const cargoCost = Math.round(paidWeight * costPerKg * 100) / 100
+  // 3rd-party cost for all packages China → border
+  const cargoCost = Math.round(totalWeight * costPerKg * 100) / 100
   const cargoMargin = Math.round((cargoRevenue - cargoCost) * 100) / 100
 
   const ledger = (financeData ?? []).map(row => mapFinanceRow(row as Record<string, any>))
@@ -84,6 +88,8 @@ export default defineEventHandler(async (event) => {
     pricePerKg,
     costPerKg,
     marginPerKg: margin,
+    goodsCount: allGoods.length,
+    totalWeight,
     paidCount: paidGoods.length,
     paidWeight,
     paidRevenue: cargoRevenue,

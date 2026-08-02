@@ -27,7 +27,8 @@ export function useFormatters(locale = 'ru-RU') {
 
   function formatDate(iso: string | null) {
     if (!iso) return '—'
-    return new Date(iso).toLocaleDateString(locale, {
+    const value = /^\d{4}-\d{2}-\d{2}$/.test(iso) ? `${iso}T12:00:00.000Z` : iso
+    return new Date(value).toLocaleDateString(locale, {
       day: '2-digit',
       month: '2-digit',
       year: 'numeric',

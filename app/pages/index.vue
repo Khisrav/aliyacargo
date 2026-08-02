@@ -135,7 +135,8 @@ function onWeightInput(e: Event) {
   let val = input.value.replace(',', '.').replace(/[^\d.]/g, '')
   const parts = val.split('.')
   if (parts.length > 2) val = `${parts[0]}.${parts.slice(1).join('')}`
-  if (val.startsWith('0') && !val.includes('.')) val = `0.${val.slice(1)}`
+  // Only auto-insert decimal when typing 05 → 0.5, not bare "0" (blocks clearing)
+  if (/^0\d/.test(val) && !val.includes('.')) val = `0.${val.slice(1)}`
   weight.value = val
   input.value = val
 }
