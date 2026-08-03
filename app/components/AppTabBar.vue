@@ -5,15 +5,15 @@ const { tabBarHidden } = useTabBar()
 
 const primary = [
   {
-    to: '/',
-    label: 'Весы',
-    match: (path: string) => path === '/',
-    icon: 'scale',
+    to: '/acceptances',
+    label: 'Приёмка',
+    match: (path: string) => path === '/' || path.startsWith('/acceptances'),
+    icon: 'cargo',
   },
   {
-    to: '/goods',
-    label: 'Записи',
-    match: (path: string) => path.startsWith('/goods'),
+    to: '/warehouse',
+    label: 'Склад',
+    match: (path: string) => path.startsWith('/warehouse'),
     icon: 'box',
   },
   {
@@ -25,18 +25,13 @@ const primary = [
 ] as const
 
 const moreLinks = [
-  { to: '/stats', label: 'Склад', desc: 'KPI, долги, график', icon: 'warehouse' },
-  { to: '/stats/finance', label: 'Финансы', desc: 'Чистая прибыль', icon: 'finance' },
-  { to: '/finance', label: 'Записи финансов', desc: 'Доходы и расходы', icon: 'ledger' },
-  { to: '/reports', label: 'Отчёты', desc: 'Ежедневные сводки', icon: 'report' },
-  { to: '/trash', label: 'Корзина', desc: 'Восстановление записей', icon: 'trash' },
+  { to: '/stats', label: 'Статистика', desc: 'Остатки, финансы, графики', icon: 'warehouse' },
+  { to: '/finance', label: 'Финансы', desc: 'Доходы и расходы', icon: 'ledger' },
 ] as const
 
 const moreActive = computed(() =>
   route.path.startsWith('/stats')
-  || route.path.startsWith('/finance')
-  || route.path.startsWith('/reports')
-  || route.path.startsWith('/trash'),
+  || route.path.startsWith('/finance'),
 )
 
 watch(() => route.fullPath, () => {
@@ -65,15 +60,14 @@ watch(() => route.fullPath, () => {
               ? 'bg-gradient-to-br from-teal-300/90 to-brand text-white shadow-[0_8px_18px_rgba(13,148,136,0.35)]'
               : 'bg-transparent'"
           >
-            <svg v-if="item.icon === 'scale'" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M12 3v18" />
-              <path d="M5 7h14l-2.5 8H7.5L5 7z" />
-              <path d="M8 21h8" />
-            </svg>
-            <svg v-else-if="item.icon === 'box'" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <svg v-if="item.icon === 'cargo'" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
               <path d="M3.3 7.5L12 12l8.7-4.5" />
               <path d="M12 12v9" />
+            </svg>
+            <svg v-else-if="item.icon === 'box'" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 21V8l9-5 9 5v13" />
+              <path d="M9 21v-8h6v8" />
             </svg>
             <svg v-else width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M16 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2" />
@@ -124,38 +118,22 @@ watch(() => route.fullPath, () => {
       >
         <span
           class="flex h-11 w-11 items-center justify-center rounded-2xl"
-          :class="{
-            'bg-gradient-to-br from-teal-300 to-brand text-white shadow-[0_8px_18px_rgba(13,148,136,0.28)]': link.icon === 'warehouse' || link.icon === 'finance' || link.icon === 'report',
-            'bg-gradient-to-br from-amber-200 to-accent text-ink shadow-[0_8px_18px_rgba(245,158,11,0.28)]': link.icon === 'ledger' || link.icon === 'trash',
-          }"
+          :class="link.icon === 'warehouse'
+            ? 'bg-gradient-to-br from-teal-300 to-brand text-white shadow-[0_8px_18px_rgba(13,148,136,0.28)]'
+            : 'bg-gradient-to-br from-amber-200 to-accent text-ink shadow-[0_8px_18px_rgba(245,158,11,0.28)]'"
         >
           <svg v-if="link.icon === 'warehouse'" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M3 21V8l9-5 9 5v13" />
-            <path d="M9 21v-8h6v8" />
-          </svg>
-          <svg v-else-if="link.icon === 'finance'" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M4 19V5" />
             <path d="M4 19h16" />
             <path d="M8 15v-4" />
             <path d="M12 15V8" />
             <path d="M16 15v-7" />
           </svg>
-          <svg v-else-if="link.icon === 'ledger'" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <svg v-else width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
             <path d="M14 2v6h6" />
             <path d="M8 13h8" />
             <path d="M8 17h5" />
-          </svg>
-          <svg v-else-if="link.icon === 'report'" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" />
-            <rect x="9" y="3" width="6" height="4" rx="1" />
-            <path d="M9 12h6" />
-            <path d="M9 16h4" />
-          </svg>
-          <svg v-else width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
-            <path d="M3 6h18" />
-            <path d="M8 6V4h8v2" />
-            <path d="M19 6l-1 14H6L5 6" />
           </svg>
         </span>
         <div class="min-w-0 flex-1">

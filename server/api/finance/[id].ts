@@ -1,7 +1,8 @@
 import { createError, readBody } from 'h3'
 import { requireTelegramAuth } from '../../utils/auth'
-import { mapFinanceRow, type FinanceType } from '../../utils/finance'
+import { mapFinanceRow } from '../../utils/finance'
 import { useSupabaseAdmin } from '../../utils/supabase'
+import type { FinanceType } from '#shared/types/domain'
 
 export default defineEventHandler(async (event) => {
   requireTelegramAuth(event)

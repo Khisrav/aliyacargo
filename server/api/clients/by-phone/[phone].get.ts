@@ -1,13 +1,12 @@
-import { createError } from 'h3'
-import { requireTelegramAuth } from '../../utils/auth'
-import { useSupabaseAdmin } from '../../utils/supabase'
+import { createError, getRouterParam } from 'h3'
+import { requireTelegramAuth } from '../../../utils/auth'
+import { useSupabaseAdmin } from '../../../utils/supabase'
 import { isValidPhone, normalizePhone } from '#shared/utils/phone'
 
 export default defineEventHandler(async (event) => {
   requireTelegramAuth(event)
-
-  const raw = getRouterParam(event, 'phone') || ''
-  const phone = normalizePhone(raw)
+  const phoneParam = getRouterParam(event, 'phone') || ''
+  const phone = normalizePhone(phoneParam)
 
   if (!isValidPhone(phone)) {
     throw createError({ statusCode: 400, statusMessage: 'Телефон должен содержать 9 цифр' })
@@ -15,8 +14,8 @@ export default defineEventHandler(async (event) => {
 
   const supabase = useSupabaseAdmin()
   const { data, error } = await supabase
-    .from('customers')
-    .select('id, phone, name, created_at, updated_at')
+    .from('clients')
+    .select('id, name, phone')
     .eq('phone', phone)
     .is('deleted_at', null)
     .maybeSingle()
@@ -26,4 +25,6 @@ export default defineEventHandler(async (event) => {
   }
 
   return data
+    ? { id: Number(data.id), name: String(data.name), phone: String(data.phone) }
+    : null
 })

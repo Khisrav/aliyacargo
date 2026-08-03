@@ -1,122 +1,89 @@
 import { createError, readBody } from 'h3'
 import { requireTelegramAuth } from '../../utils/auth'
+import { upsertClientByPhone } from '../../utils/clients'
 import { GOODS_SELECT, mapGoodRow, useSupabaseAdmin } from '../../utils/supabase'
-import { isValidPhone, normalizePhone } from '#shared/utils/phone'
 
 interface CreateGoodBody {
   phone?: string
   name?: string
   weight?: number | string
+  acceptance_id?: number | string
+  good_name?: string
 }
 
 export default defineEventHandler(async (event) => {
-  const user = requireTelegramAuth(event)
+  requireTelegramAuth(event)
   const config = useRuntimeConfig()
   const body = await readBody<CreateGoodBody>(event)
 
-  const phone = normalizePhone(body.phone || '')
-  const name = body.name?.trim() || ''
   const weight = Number(body.weight)
-
-  if (!isValidPhone(phone)) {
-    throw createError({ statusCode: 400, statusMessage: 'Телефон должен содержать 9 цифр' })
-  }
-
-  if (!name) {
-    throw createError({ statusCode: 400, statusMessage: 'Укажите имя клиента' })
-  }
-
   if (!Number.isFinite(weight) || weight <= 0) {
     throw createError({ statusCode: 400, statusMessage: 'Вес должен быть больше 0' })
   }
 
-  const pricePerKg = Number(config.pricePerKg) || 1000
-  const price = Math.round(weight * pricePerKg * 100) / 100
-  const createdBy = user.username ?? String(user.id)
   const supabase = useSupabaseAdmin()
+  let acceptanceId = body.acceptance_id != null ? Number(body.acceptance_id) : NaN
 
-  const { data: existing, error: lookupError } = await supabase
-    .from('customers')
-    .select('id, phone, name')
-    .eq('phone', phone)
-    .is('deleted_at', null)
-    .maybeSingle()
-
-  if (lookupError) {
-    throw createError({ statusCode: 500, statusMessage: lookupError.message })
-  }
-
-  let customerId = existing?.id as number | undefined
-
-  if (existing) {
-    if (existing.name !== name) {
-      const { error: updateError } = await supabase
-        .from('customers')
-        .update({ name, updated_at: new Date().toISOString() })
-        .eq('id', existing.id)
-
-      if (updateError) {
-        throw createError({ statusCode: 500, statusMessage: updateError.message })
-      }
-    }
-  }
-  else {
-    // Prefer restoring a soft-deleted customer with this phone over creating a duplicate
-    const { data: trashed } = await supabase
-      .from('customers')
-      .select('id, deleted_at')
-      .eq('phone', phone)
-      .not('deleted_at', 'is', null)
-      .order('deleted_at', { ascending: false })
+  if (!Number.isFinite(acceptanceId) || acceptanceId <= 0) {
+    const { data: open } = await supabase
+      .from('acceptances')
+      .select('id, status, total_weight')
+      .eq('status', 'open')
+      .is('deleted_at', null)
       .limit(1)
       .maybeSingle()
 
-    if (trashed?.deleted_at) {
-      const deletedAt = trashed.deleted_at
-      const { error: restoreGoodsError } = await supabase
-        .from('goods')
-        .update({ deleted_at: null })
-        .eq('customer_id', trashed.id)
-        .eq('deleted_at', deletedAt)
-
-      if (restoreGoodsError) {
-        throw createError({ statusCode: 500, statusMessage: restoreGoodsError.message })
-      }
-
-      const { error: restoreCustomerError } = await supabase
-        .from('customers')
-        .update({ name, deleted_at: null, updated_at: new Date().toISOString() })
-        .eq('id', trashed.id)
-
-      if (restoreCustomerError) {
-        throw createError({ statusCode: 500, statusMessage: restoreCustomerError.message })
-      }
-
-      customerId = trashed.id
+    if (!open) {
+      throw createError({ statusCode: 400, statusMessage: 'Нет открытой приёмки. Создайте приёмку перед сортировкой.' })
     }
-    else {
-      const { data: created, error: createErrorDb } = await supabase
-        .from('customers')
-        .insert({ phone, name })
-        .select('id')
-        .single()
+    acceptanceId = Number(open.id)
+  }
 
-      if (createErrorDb) {
-        throw createError({ statusCode: 500, statusMessage: createErrorDb.message })
-      }
+  const { data: acceptance, error: accError } = await supabase
+    .from('acceptances')
+    .select('id, status, total_weight')
+    .eq('id', acceptanceId)
+    .is('deleted_at', null)
+    .maybeSingle()
 
-      customerId = created.id
-    }
+  if (accError) {
+    throw createError({ statusCode: 500, statusMessage: accError.message })
+  }
+  if (!acceptance) {
+    throw createError({ statusCode: 404, statusMessage: 'Приёмка не найдена' })
+  }
+  if (acceptance.status !== 'open') {
+    throw createError({ statusCode: 400, statusMessage: 'Приёмка закрыта — добавлять товары нельзя' })
+  }
+
+  const client = await upsertClientByPhone(body.phone || '', body.name || '')
+  const pricePerKg = Number(config.pricePerKg) || 30
+  const price = Math.round(weight * pricePerKg * 100) / 100
+  const goodName = body.good_name?.trim() || client.name
+
+  const { data: existingGoods } = await supabase
+    .from('goods')
+    .select('weight')
+    .eq('acceptance_id', acceptanceId)
+    .is('deleted_at', null)
+
+  const sortedSoFar = (existingGoods ?? []).reduce((s, g) => s + Number(g.weight), 0)
+  if (sortedSoFar + weight > Number(acceptance.total_weight) + 0.05) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: `Превышен вес приёмки (${acceptance.total_weight} кг). Уже отсортировано ${Math.round(sortedSoFar * 1000) / 1000} кг.`,
+    })
   }
 
   const { data, error } = await supabase
     .from('goods')
     .insert({
-      customer_id: customerId,
+      acceptance_id: acceptanceId,
+      client_id: client.id,
+      name: goodName,
       weight,
       price,
       has_paid: false,
-      created_by: createdBy,
     })
     .select(GOODS_SELECT)
     .single()

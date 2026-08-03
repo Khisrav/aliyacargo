@@ -1,28 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { createError } from 'h3'
-
-export interface Customer {
-  id: number
-  phone: string
-  name: string
-  created_at: string
-  updated_at: string
-  deleted_at?: string | null
-}
-
-export interface CustomerGood {
-  id: number
-  customer_id: number
-  weight: number
-  price: number
-  has_paid: boolean
-  initiator: string | null
-  created_by: string | null
-  created_at: string
-  deleted_at?: string | null
-  name: string
-  phone: string
-}
+import type { Acceptance, Good } from '#shared/types/domain'
 
 export function useSupabaseAdmin() {
   const config = useRuntimeConfig()
@@ -39,37 +17,62 @@ export function useSupabaseAdmin() {
   })
 }
 
-export function mapGoodRow(row: Record<string, any>): CustomerGood {
-  const customer = row.customers ?? {}
-  return {
-    id: row.id,
-    customer_id: row.customer_id,
-    weight: Number(row.weight),
-    price: Number(row.price),
-    has_paid: Boolean(row.has_paid),
-    initiator: row.initiator ?? null,
-    created_by: row.created_by ?? null,
-    created_at: row.created_at,
-    deleted_at: row.deleted_at ?? null,
-    name: customer.name ?? row.name ?? '',
-    phone: customer.phone ?? row.phone ?? '',
-  }
-}
-
 export const GOODS_SELECT = `
   id,
-  customer_id,
+  acceptance_id,
+  client_id,
+  name,
   weight,
   price,
   has_paid,
-  initiator,
-  created_by,
+  paid_at,
+  payment_accepted_by,
   created_at,
+  updated_at,
   deleted_at,
-  customers (
+  clients (
     id,
     phone,
     name,
     deleted_at
   )
 `
+
+export function mapGoodRow(row: Record<string, any>): Good {
+  const client = row.clients ?? {}
+  return {
+    id: Number(row.id),
+    acceptance_id: Number(row.acceptance_id),
+    client_id: Number(row.client_id),
+    name: String(row.name ?? ''),
+    weight: Number(row.weight),
+    price: Number(row.price),
+    has_paid: Boolean(row.has_paid),
+    paid_at: row.paid_at ?? null,
+    payment_accepted_by: row.payment_accepted_by ?? null,
+    created_at: String(row.created_at),
+    updated_at: String(row.updated_at ?? row.created_at),
+    client_name: String(client.name ?? ''),
+    phone: String(client.phone ?? ''),
+  }
+}
+
+export function mapAcceptanceRow(
+  row: Record<string, any>,
+  extras?: { sorted_weight?: number, goods_count?: number },
+): Acceptance {
+  return {
+    id: Number(row.id),
+    accepted_at: String(row.accepted_at),
+    total_weight: Number(row.total_weight),
+    paid_tjs: Number(row.paid_tjs),
+    cost_per_kg: Number(row.cost_per_kg),
+    status: row.status === 'closed' ? 'closed' : 'open',
+    closed_at: row.closed_at ?? null,
+    waste_weight: row.waste_weight != null ? Number(row.waste_weight) : null,
+    created_by: row.created_by ?? null,
+    created_at: String(row.created_at),
+    sorted_weight: extras?.sorted_weight,
+    goods_count: extras?.goods_count,
+  }
+}

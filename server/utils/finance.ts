@@ -1,13 +1,4 @@
-export type FinanceType = 'income' | 'expense'
-
-export interface FinanceRecord {
-  id: number
-  type: FinanceType
-  amount: number
-  note: string
-  created_by: string | null
-  created_at: string
-}
+import type { FinanceRecord } from '#shared/types/domain'
 
 export function mapFinanceRow(row: Record<string, any>): FinanceRecord {
   return {

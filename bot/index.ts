@@ -18,7 +18,7 @@ if (!webAppUrl) {
 }
 
 if (!supabaseUrl || !supabaseKey) {
-  console.error('SUPABASE_URL and SUPABASE_SERVICE_KEY are required for customer lookup')
+  console.error('SUPABASE_URL and SUPABASE_SERVICE_KEY are required for client lookup')
   process.exit(1)
 }
 
@@ -27,32 +27,30 @@ const supabase = createClient(supabaseUrl, supabaseKey, {
   auth: { persistSession: false, autoRefreshToken: false },
 })
 
-const trackUrl = `${webAppUrl.replace(/\/$/, '')}/track`
-
 function formatMoney(n: number) {
   return `${Math.round(n * 100) / 100} с.`
 }
 
 async function lookupByPhone(phone: string) {
-  const { data: customer, error: customerError } = await supabase
-    .from('customers')
+  const { data: client, error: clientError } = await supabase
+    .from('clients')
     .select('id, name, phone')
     .eq('phone', phone)
     .is('deleted_at', null)
     .maybeSingle()
 
-  if (customerError) {
-    throw new Error(customerError.message)
+  if (clientError) {
+    throw new Error(clientError.message)
   }
 
-  if (!customer) {
+  if (!client) {
     return null
   }
 
   const { data: goods, error: goodsError } = await supabase
     .from('goods')
     .select('weight, price, has_paid, created_at')
-    .eq('customer_id', customer.id)
+    .eq('client_id', client.id)
     .is('deleted_at', null)
     .order('created_at', { ascending: false })
     .limit(30)
@@ -61,11 +59,11 @@ async function lookupByPhone(phone: string) {
     throw new Error(goodsError.message)
   }
 
-  return { customer, goods: goods ?? [] }
+  return { client, goods: goods ?? [] }
 }
 
 function buildLookupMessage(
-  customer: { name: string, phone: string },
+  client: { name: string, phone: string },
   goods: Array<{ weight: number, price: number, has_paid: boolean, created_at: string }>,
 ) {
   const unpaid = goods.filter(g => !g.has_paid)
@@ -74,8 +72,8 @@ function buildLookupMessage(
   const totalWeight = goods.reduce((s, g) => s + Number(g.weight), 0)
 
   const lines = [
-    `👤 ${customer.name}`,
-    `📞 +992 ${formatPhone(customer.phone)}`,
+    `👤 ${client.name}`,
+    `📞 +992 ${formatPhone(client.phone)}`,
     '',
     `Записей: ${goods.length}`,
     `Вес: ${Math.round(totalWeight * 100) / 100} кг`,
@@ -106,13 +104,11 @@ function buildLookupMessage(
 bot.command('start', async (ctx) => {
   const keyboard = new InlineKeyboard()
     .webApp('📦 Для сотрудников', webAppUrl!)
-    .row()
-    .webApp('🔍 Мой груз', trackUrl)
 
   await ctx.reply(
     'Добро пожаловать в Aliya Cargo!\n\n'
     + '👷 Сотрудники — откройте приложение для работы.\n'
-    + '👤 Клиенты — нажмите «Мой груз» или просто отправьте номер телефона (9 цифр без +992).\n\n'
+    + '👤 Клиенты — отправьте номер телефона (9 цифр без +992).\n\n'
     + 'Пример: 901123456',
     { reply_markup: keyboard },
   )
@@ -135,7 +131,7 @@ bot.command('check', async (ctx) => {
       return
     }
 
-    await ctx.reply(buildLookupMessage(result.customer, result.goods))
+    await ctx.reply(buildLookupMessage(result.client, result.goods))
   }
   catch (err) {
     console.error('Lookup error:', err)
@@ -150,8 +146,7 @@ bot.on('message:text', async (ctx) => {
   const phone = normalizePhone(text)
   if (!isValidPhone(phone)) {
     await ctx.reply(
-      'Отправьте номер телефона без +992 (9 цифр), например: 901123456\n'
-      + 'Или откройте «Мой груз» в меню /start.',
+      'Отправьте номер телефона без +992 (9 цифр), например: 901123456',
     )
     return
   }
@@ -163,7 +158,7 @@ bot.on('message:text', async (ctx) => {
       return
     }
 
-    await ctx.reply(buildLookupMessage(result.customer, result.goods))
+    await ctx.reply(buildLookupMessage(result.client, result.goods))
   }
   catch (err) {
     console.error('Lookup error:', err)

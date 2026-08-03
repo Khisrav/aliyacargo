@@ -6,7 +6,7 @@ export default defineEventHandler(async (event) => {
 
   return {
     ok: true,
-    pricePerKg: Number(config.pricePerKg) || 1000,
+    pricePerKg: Number(config.pricePerKg) || 30,
     user: { id: user.id, username: user.username, first_name: user.first_name },
   }
 })

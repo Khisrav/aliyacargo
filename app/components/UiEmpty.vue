@@ -1,7 +1,9 @@
 <script setup lang="ts">
-defineProps<{
-  message: string
-}>()
+withDefaults(defineProps<{
+  message?: string
+  title?: string
+  description?: string
+}>(), {})
 </script>
 
 <template>
@@ -11,6 +13,9 @@ defineProps<{
         <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
       </svg>
     </div>
-    <p class="text-sm font-medium text-muted">{{ message }}</p>
+    <p v-if="title" class="text-base font-extrabold text-ink">{{ title }}</p>
+    <p class="text-sm font-medium text-muted" :class="title ? 'mt-1' : ''">
+      {{ description || message || 'Пусто' }}
+    </p>
   </div>
 </template>

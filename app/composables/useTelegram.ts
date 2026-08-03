@@ -1,16 +1,3 @@
-export interface CustomerGood {
-  id: number
-  customer_id: number
-  name: string
-  phone: string
-  weight: number
-  price: number
-  has_paid: boolean
-  initiator: string | null
-  created_by: string | null
-  created_at: string
-}
-
 export function useTelegram() {
   // shallowRef avoids Vue deep-wrapping Telegram's WebApp object in a reactive
   // Proxy, which breaks on its non-configurable properties (e.g. HapticFeedback)
