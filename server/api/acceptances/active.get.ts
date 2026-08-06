@@ -1,4 +1,4 @@
-import { createError } from 'h3'
+import { createError, send, setHeader } from 'h3'
 import { requireTelegramAuth } from '../../utils/auth'
 import { mapAcceptanceRow, useSupabaseAdmin } from '../../utils/supabase'
 
@@ -19,7 +19,11 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 500, statusMessage: error.message })
   }
 
-  if (!data) return null
+  if (!data) {
+    // Explicit JSON null — bare `return null` yields an empty body in Nitro
+    setHeader(event, 'content-type', 'application/json; charset=utf-8')
+    return send(event, 'null')
+  }
 
   const { data: goods } = await supabase
     .from('goods')

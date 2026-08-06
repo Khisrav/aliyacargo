@@ -12,9 +12,11 @@ withDefaults(defineProps<{
   paidLabel?: string
   unpaidLabel?: string
   showTrash?: boolean
+  showEdit?: boolean
 }>(), {
   readonly: false,
   showTrash: true,
+  showEdit: false,
   paidLabel: 'Оплачено',
   unpaidLabel: 'Не оплачено',
 })
@@ -22,6 +24,7 @@ withDefaults(defineProps<{
 defineEmits<{
   togglePaid: []
   remove: []
+  edit: []
 }>()
 </script>
 
@@ -45,6 +48,18 @@ defineEmits<{
     </div>
 
     <div class="flex shrink-0 items-center gap-1.5">
+      <button
+        v-if="!readonly && showEdit"
+        type="button"
+        class="ui-icon-btn"
+        aria-label="Изменить"
+        @click="$emit('edit')"
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 20h9" />
+          <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+        </svg>
+      </button>
       <button
         v-if="!readonly"
         type="button"

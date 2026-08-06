@@ -101,14 +101,18 @@ function buildLookupMessage(
   return lines.join('\n')
 }
 
+const trackUrl = `${webAppUrl.replace(/\/$/, '')}/track`
+
 bot.command('start', async (ctx) => {
   const keyboard = new InlineKeyboard()
     .webApp('📦 Для сотрудников', webAppUrl!)
+    .row()
+    .webApp('🔍 Мой груз', trackUrl)
 
   await ctx.reply(
     'Добро пожаловать в Aliya Cargo!\n\n'
     + '👷 Сотрудники — откройте приложение для работы.\n'
-    + '👤 Клиенты — отправьте номер телефона (9 цифр без +992).\n\n'
+    + '👤 Клиенты — нажмите «Мой груз» или отправьте номер телефона (9 цифр без +992).\n\n'
     + 'Пример: 901123456',
     { reply_markup: keyboard },
   )

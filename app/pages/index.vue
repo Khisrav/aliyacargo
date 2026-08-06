@@ -3,18 +3,21 @@ import type { Acceptance } from '#shared/types/domain'
 
 const { initData, ready } = useTelegram()
 const { apiFetch } = useApi(initData)
-const { requireWorker } = useWorkerGate()
+const { gate } = useWorkerGate()
 const router = useRouter()
 
-const state = ref<'loading' | 'denied' | 'error'>('loading')
+const state = ref<'loading' | 'error'>('loading')
 const errorMessage = ref('')
 
 watch(ready, async () => {
   if (!ready.value) return
-  if (!(await requireWorker())) {
-    state.value = 'denied'
+
+  const role = await gate()
+  if (role === 'guest') {
+    await router.replace('/track')
     return
   }
+
   try {
     await apiFetch('/api/auth/check', { method: 'POST' })
     const active = await apiFetch<Acceptance | null>('/api/acceptances/active')

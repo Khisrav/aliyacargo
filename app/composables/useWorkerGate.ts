@@ -31,7 +31,7 @@ export function useWorkerGate() {
     const role = await gate()
     if (role === 'guest') {
       const path = useRoute().path
-      if (path !== '/maintenance') {
+      if (path !== '/maintenance' && path !== '/track') {
         await navigateTo('/maintenance')
       }
       return false

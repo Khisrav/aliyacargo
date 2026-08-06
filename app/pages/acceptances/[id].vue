@@ -25,6 +25,11 @@ const nameLocked = ref(false)
 const lookingUp = ref(false)
 const submitting = ref(false)
 const closing = ref(false)
+const editOpen = ref(false)
+const editing = ref<Good | null>(null)
+const editName = ref('')
+const editWeight = ref('')
+const editSaving = ref(false)
 
 const phoneField = ref<{ focus: () => void } | null>(null)
 const nameRef = ref<HTMLInputElement>()
@@ -196,6 +201,81 @@ async function togglePaid(item: Good) {
   }
   catch (e) {
     showToast('error', e instanceof Error ? e.message : 'Не удалось обновить')
+  }
+}
+
+async function removeGood(item: Good) {
+  const ok = await confirm({
+    title: 'Удалить товар?',
+    message: `«${item.client_name || item.name}» будет перемещён в корзину.`,
+    confirmLabel: 'В корзину',
+    danger: true,
+  })
+  if (!ok) return
+  try {
+    await apiFetch(`/api/trash/goods/${item.id}`, { method: 'DELETE' })
+    goods.value = goods.value.filter(g => g.id !== item.id)
+    if (acceptance.value) {
+      acceptance.value = {
+        ...acceptance.value,
+        sorted_weight: Math.max(0, Math.round(((acceptance.value.sorted_weight ?? 0) - item.weight) * 1000) / 1000),
+        goods_count: Math.max(0, (acceptance.value.goods_count ?? 0) - 1),
+      }
+    }
+    showToast('success', 'Перемещено в корзину')
+  }
+  catch (e) {
+    showToast('error', e instanceof Error ? e.message : 'Не удалось удалить')
+  }
+}
+
+function openEdit(item: Good) {
+  if (acceptance.value?.status !== 'open') return
+  editing.value = item
+  editName.value = item.name || item.client_name
+  editWeight.value = String(item.weight)
+  editOpen.value = true
+}
+
+const editWeightNum = computed(() => parseFloat(editWeight.value.replace(',', '.')) || 0)
+const editPrice = computed(() => Math.round(editWeightNum.value * pricePerKg.value * 100) / 100)
+const canSaveEdit = computed(() =>
+  !!editing.value
+  && editName.value.trim().length > 0
+  && editWeightNum.value > 0
+  && !editSaving.value,
+)
+
+async function saveEdit() {
+  if (!canSaveEdit.value || !editing.value || !acceptance.value) return
+  editSaving.value = true
+  try {
+    const updated = await apiFetch<Good>(`/api/goods/${editing.value.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        name: editName.value.trim(),
+        weight: editWeightNum.value,
+      }),
+    })
+    const idx = goods.value.findIndex(g => g.id === updated.id)
+    const prev = idx !== -1 ? goods.value[idx] : null
+    if (idx !== -1) goods.value[idx] = updated
+    if (prev) {
+      const delta = updated.weight - prev.weight
+      acceptance.value = {
+        ...acceptance.value,
+        sorted_weight: Math.round(((acceptance.value.sorted_weight ?? 0) + delta) * 1000) / 1000,
+      }
+    }
+    editOpen.value = false
+    editing.value = null
+    showToast('success', 'Сохранено')
+  }
+  catch (e) {
+    showToast('error', e instanceof Error ? e.message : 'Не удалось сохранить')
+  }
+  finally {
+    editSaving.value = false
   }
 }
 
@@ -387,12 +467,41 @@ async function closeAcceptance() {
             :meta="`${formatWeight(item.weight)} · ${formatPrice(item.price)} · ${formatDateTime(item.created_at)}`"
             :has-paid="item.has_paid"
             :initiator="item.payment_accepted_by"
-            :show-trash="false"
+            :show-edit="acceptance.status === 'open'"
+            :show-trash="acceptance.status === 'open'"
             @toggle-paid="togglePaid(item)"
+            @edit="openEdit(item)"
+            @remove="removeGood(item)"
           />
         </ul>
       </section>
     </main>
+
+    <UiSheet v-model="editOpen">
+      <div class="space-y-4 pt-1">
+        <h2 class="text-xl font-extrabold text-ink">Изменить товар</h2>
+        <label class="ui-field">
+          <span class="ui-label">Название / имя</span>
+          <input v-model="editName" type="text" class="ui-input" autocomplete="off">
+        </label>
+        <label class="ui-field">
+          <span class="ui-label">Вес (кг)</span>
+          <input
+            v-model="editWeight"
+            type="text"
+            inputmode="decimal"
+            class="ui-input text-center text-2xl font-extrabold tabular-nums"
+          >
+        </label>
+        <div class="flex justify-between rounded-[1.25rem] bg-brand-soft/70 px-4 py-3 text-sm">
+          <span class="font-bold text-brand-dark/70">Цена</span>
+          <span class="font-extrabold tabular-nums text-brand-dark">{{ formatPrice(editPrice) }}</span>
+        </div>
+        <button type="button" class="ui-btn-primary w-full" :disabled="!canSaveEdit" @click="saveEdit">
+          {{ editSaving ? 'Сохранение…' : 'Сохранить' }}
+        </button>
+      </div>
+    </UiSheet>
 
     <UiToast :toast="toast" />
   </div>

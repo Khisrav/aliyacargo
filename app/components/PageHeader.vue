@@ -28,10 +28,7 @@ defineEmits<{
         </svg>
       </NuxtLink>
       <div class="min-w-0">
-        <p class="text-[11px] font-extrabold uppercase tracking-[0.16em] text-brand/80">
-          Aliya Cargo
-        </p>
-        <h1 class="mt-1 truncate text-[28px] font-extrabold leading-[1.05] tracking-[-0.03em] text-ink">
+        <h1 class="truncate text-[28px] font-extrabold leading-[1.05] tracking-[-0.03em] text-ink">
           {{ title }}
         </h1>
         <p v-if="subtitle" class="mt-1.5 text-sm font-semibold text-muted">

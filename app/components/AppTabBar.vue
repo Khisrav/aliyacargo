@@ -27,11 +27,13 @@ const primary = [
 const moreLinks = [
   { to: '/stats', label: 'Статистика', desc: 'Остатки, финансы, графики', icon: 'warehouse' },
   { to: '/finance', label: 'Финансы', desc: 'Доходы и расходы', icon: 'ledger' },
+  { to: '/trash', label: 'Корзина', desc: 'Восстановление · 14 дней', icon: 'trash' },
 ] as const
 
 const moreActive = computed(() =>
   route.path.startsWith('/stats')
-  || route.path.startsWith('/finance'),
+  || route.path.startsWith('/finance')
+  || route.path.startsWith('/trash'),
 )
 
 watch(() => route.fullPath, () => {
@@ -106,8 +108,7 @@ watch(() => route.fullPath, () => {
   <UiSheet v-model="moreOpen">
     <div class="space-y-3 pt-1">
       <div>
-        <p class="text-[11px] font-extrabold uppercase tracking-[0.14em] text-brand">Aliya Cargo</p>
-        <h2 class="mt-1 text-2xl font-extrabold tracking-tight text-ink">Ещё</h2>
+        <h2 class="text-2xl font-extrabold tracking-tight text-ink">Ещё</h2>
       </div>
       <NuxtLink
         v-for="link in moreLinks"
@@ -128,6 +129,11 @@ watch(() => route.fullPath, () => {
             <path d="M8 15v-4" />
             <path d="M12 15V8" />
             <path d="M16 15v-7" />
+          </svg>
+          <svg v-else-if="link.icon === 'trash'" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+            <path d="M3 6h18" />
+            <path d="M8 6V4h8v2" />
+            <path d="M19 6l-1 14H6L5 6" />
           </svg>
           <svg v-else width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />

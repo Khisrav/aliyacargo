@@ -12,10 +12,7 @@ definePageMeta({
       </svg>
     </div>
     <div>
-      <p class="text-[11px] font-extrabold uppercase tracking-[0.16em] text-brand/80">
-        Aliya Cargo
-      </p>
-      <h1 class="mt-2 text-2xl font-extrabold tracking-tight text-ink">
+      <h1 class="text-2xl font-extrabold tracking-tight text-ink">
         Технические работы
       </h1>
       <p class="mt-2 max-w-xs text-sm font-medium text-muted">

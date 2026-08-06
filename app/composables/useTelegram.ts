@@ -43,12 +43,29 @@ export function useApi(initData: Ref<string>) {
       },
     })
 
+    const text = await res.text()
+
     if (!res.ok) {
-      const err = await res.json().catch(() => ({ statusMessage: res.statusText }))
-      throw new Error(err.statusMessage || 'Request failed')
+      let message = res.statusText || 'Request failed'
+      if (text) {
+        try {
+          const err = JSON.parse(text)
+          message = err.statusMessage || err.message || message
+        }
+        catch { /* keep statusText */ }
+      }
+      throw new Error(message)
     }
 
-    return res.json()
+    // Nitro/h3 returns an empty body for `return null`
+    if (!text.trim()) return null as T
+
+    try {
+      return JSON.parse(text) as T
+    }
+    catch {
+      throw new Error('Некорректный ответ сервера')
+    }
   }
 
   return { apiFetch }
