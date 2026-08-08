@@ -52,6 +52,58 @@ export interface FinanceRecord {
   created_at: string
 }
 
+export interface ReportCollector {
+  collector: string
+  count: number
+  amount: number
+}
+
+export interface ReportFinanceItem {
+  type: FinanceType
+  amount: number
+  note: string
+  created_by: string | null
+  created_at: string
+}
+
+export interface DailyReport {
+  id: number
+  report_date: string
+  /** goods sorted during the day */
+  goods_count: number
+  goods_weight: number
+  goods_revenue: number
+  goods_paid_count: number
+  goods_paid_revenue: number
+  /** of the day's goods, still unpaid at midnight */
+  unpaid_count: number
+  unpaid_weight: number
+  unpaid_revenue: number
+  /** cash collected during the day, including goods sorted earlier */
+  payments_count: number
+  payments_weight: number
+  payments_revenue: number
+  payments_by_collector: ReportCollector[]
+  income_count: number
+  income_total: number
+  expense_count: number
+  expense_total: number
+  finance_items: ReportFinanceItem[]
+  acceptances_count: number
+  acceptance_weight: number
+  acceptance_cost: number
+  acceptances_closed: number
+  waste_weight: number
+  new_clients_count: number
+  /** total outstanding debt across all clients at midnight */
+  debt_count: number
+  debt_weight: number
+  debt_revenue: number
+  debt_clients_count: number
+  net_profit: number
+  generated_at: string
+}
+
 export interface ClientListItem extends Client {
   goodsCount: number
   totalWeight: number
