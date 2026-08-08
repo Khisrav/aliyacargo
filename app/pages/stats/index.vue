@@ -236,19 +236,49 @@ async function load() {
         </section>
 
         <section v-if="stats.daily.length" class="ui-card space-y-3 px-4 py-4">
-          <h2 class="text-sm font-extrabold text-ink">Выручка по дням</h2>
-          <div class="flex h-32 items-end gap-1">
+          <div class="flex items-baseline justify-between gap-3">
+            <h2 class="text-sm font-extrabold text-ink">Выручка по дням</h2>
+            <span class="text-[11px] font-bold tabular-nums text-muted">макс. {{ formatPrice(maxDaily) }}</span>
+          </div>
+
+          <div class="flex h-32 items-end gap-1.5">
             <div
               v-for="d in stats.daily"
               :key="d.date"
-              class="flex min-w-0 flex-1 flex-col items-center justify-end gap-1"
-              :title="`${d.date}: ${formatPrice(d.revenue)}`"
+              class="flex h-full min-w-0 flex-1 flex-col justify-end"
+              :title="`${d.date}: ${formatPrice(d.revenue)} · оплачено ${formatPrice(d.paidRevenue)}`"
             >
               <div
-                class="w-full rounded-t-md bg-gradient-to-t from-brand to-teal-300"
+                class="relative mx-auto w-full max-w-[2.5rem] overflow-hidden rounded-t-md bg-brand/20"
                 :style="{ height: `${Math.max(4, (d.revenue / maxDaily) * 100)}%` }"
-              />
+              >
+                <div
+                  class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-brand to-teal-300"
+                  :style="{ height: `${d.revenue ? (d.paidRevenue / d.revenue) * 100 : 0}%` }"
+                />
+              </div>
             </div>
+          </div>
+
+          <div class="flex gap-1.5">
+            <span
+              v-for="d in stats.daily"
+              :key="d.date"
+              class="min-w-0 flex-1 truncate text-center text-[10px] font-bold tabular-nums text-muted"
+            >
+              {{ d.date.slice(8) }}
+            </span>
+          </div>
+
+          <div class="flex items-center gap-3 border-t border-white/60 pt-2 text-[11px] font-bold text-muted">
+            <span class="flex items-center gap-1.5">
+              <span class="h-2.5 w-2.5 rounded-sm bg-gradient-to-t from-brand to-teal-300" />
+              Оплачено
+            </span>
+            <span class="flex items-center gap-1.5">
+              <span class="h-2.5 w-2.5 rounded-sm bg-brand/20" />
+              Ждёт оплаты
+            </span>
           </div>
         </section>
 
