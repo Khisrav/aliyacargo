@@ -15,7 +15,7 @@ defineEmits<{
 </script>
 
 <template>
-  <header class="flex items-start justify-between gap-3 px-5 pb-3 pt-5">
+  <header class="flex items-start justify-between gap-3 px-5 pb-3 pt-16">
     <div class="flex min-w-0 items-start gap-3">
       <NuxtLink
         v-if="backTo"
