@@ -71,7 +71,7 @@ returns public.daily_reports
 language plpgsql
 security definer
 set search_path = public
-as $$
+as $fn$
 declare
   tz constant text := 'Asia/Dushanbe';
   d date := coalesce(target_date, (timezone(tz, now()))::date - 1);
@@ -271,14 +271,14 @@ begin
 
   return result;
 end;
-$$;
+$fn$;
 
 revoke all on function public.generate_daily_report(date) from public;
 revoke all on function public.generate_daily_report(date) from anon, authenticated;
 grant execute on function public.generate_daily_report(date) to service_role;
 
 -- 19:00 UTC = 00:00 Asia/Dushanbe of the next day, so the report covers the day that just ended.
-do $$
+do $cron$
 begin
   if exists (select 1 from cron.job where jobname = 'generate-daily-report') then
     perform cron.unschedule('generate-daily-report');
@@ -291,7 +291,7 @@ exception
   when others then
     raise notice 'pg_cron schedule skipped: %', sqlerrm;
 end;
-$$;
+$cron$;
 
 -- Stamp new acceptances with the local date, otherwise batches entered between
 -- 00:00 and 05:00 local land in the previous day's report.
@@ -299,7 +299,7 @@ alter table public.acceptances
   alter column accepted_at set default (timezone('Asia/Dushanbe', now()))::date;
 
 -- Backfill every day that already has data so the report list is not empty.
-do $$
+do $backfill$
 declare
   day date;
 begin
@@ -317,4 +317,4 @@ begin
     perform public.generate_daily_report(day);
   end loop;
 end;
-$$;
+$backfill$;

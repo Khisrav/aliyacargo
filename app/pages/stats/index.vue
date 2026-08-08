@@ -143,6 +143,23 @@ async function load() {
       <UiError v-else-if="state === 'error'" :message="errorMessage" @retry="load" />
 
       <template v-else-if="stats">
+        <NuxtLink to="/stats/acceptances" class="ui-card flex items-center gap-3 px-4 py-4 transition active:scale-[0.99]">
+          <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-teal-300 to-brand text-white shadow-[0_8px_18px_rgba(13,148,136,0.28)]">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+              <path d="M3.3 7.5L12 12l8.7-4.5" />
+              <path d="M12 12v9" />
+            </svg>
+          </span>
+          <div class="min-w-0 flex-1">
+            <p class="font-extrabold text-ink">Готовность приёмок</p>
+            <p class="text-xs font-medium text-muted">Сколько выкуплено по каждой партии</p>
+          </div>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" class="shrink-0 text-muted">
+            <path d="M9 18l6-6-6-6" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </NuxtLink>
+
         <section class="ui-card space-y-3 px-4 py-4">
           <h2 class="text-sm font-extrabold text-ink">Остатки (неоплачено)</h2>
           <div class="grid grid-cols-3 gap-2 text-center">

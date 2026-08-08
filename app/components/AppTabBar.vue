@@ -25,13 +25,17 @@ const primary = [
 ] as const
 
 const moreLinks = [
+  { to: '/reports', label: 'Отчёты', desc: 'Итоги дня · закрытие в 00:00', icon: 'report' },
   { to: '/stats', label: 'Статистика', desc: 'Остатки, финансы, графики', icon: 'warehouse' },
   { to: '/finance', label: 'Финансы', desc: 'Доходы и расходы', icon: 'ledger' },
   { to: '/trash', label: 'Корзина', desc: 'Восстановление · 14 дней', icon: 'trash' },
 ] as const
 
+const TEAL_ICONS = new Set(['warehouse', 'report'])
+
 const moreActive = computed(() =>
-  route.path.startsWith('/stats')
+  route.path.startsWith('/reports')
+  || route.path.startsWith('/stats')
   || route.path.startsWith('/finance')
   || route.path.startsWith('/trash'),
 )
@@ -119,7 +123,7 @@ watch(() => route.fullPath, () => {
       >
         <span
           class="flex h-11 w-11 items-center justify-center rounded-2xl"
-          :class="link.icon === 'warehouse'
+          :class="TEAL_ICONS.has(link.icon)
             ? 'bg-gradient-to-br from-teal-300 to-brand text-white shadow-[0_8px_18px_rgba(13,148,136,0.28)]'
             : 'bg-gradient-to-br from-amber-200 to-accent text-ink shadow-[0_8px_18px_rgba(245,158,11,0.28)]'"
         >
@@ -129,6 +133,12 @@ watch(() => route.fullPath, () => {
             <path d="M8 15v-4" />
             <path d="M12 15V8" />
             <path d="M16 15v-7" />
+          </svg>
+          <svg v-else-if="link.icon === 'report'" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="4" y="3" width="16" height="18" rx="2" />
+            <path d="M8 8h8" />
+            <path d="M8 12h5" />
+            <path d="M8 16h3" />
           </svg>
           <svg v-else-if="link.icon === 'trash'" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
             <path d="M3 6h18" />

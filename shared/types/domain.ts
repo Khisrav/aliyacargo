@@ -52,6 +52,59 @@ export interface FinanceRecord {
   created_at: string
 }
 
+export interface AcceptanceStats {
+  id: number
+  accepted_at: string
+  status: AcceptanceStatus
+  closed_at: string | null
+  total_weight: number
+  sorted_weight: number
+  /** frozen at close; null while the batch is still open */
+  waste_weight: number | null
+  /** still to sort; only meaningful while the batch is open */
+  unsorted_weight: number
+  /** packages deleted after the batch closed, so the weights still balance */
+  removed_weight: number
+  /** share of the received weight that has been sorted into packages */
+  sorting_rate: number
+  goods_count: number
+  paid_count: number
+  unpaid_count: number
+  clients_count: number
+  total_revenue: number
+  paid_revenue: number
+  unpaid_revenue: number
+  /** share of the batch's revenue clients have actually paid */
+  payment_rate: number
+  cost: number
+  cost_per_kg: number
+  /** profit once every client pays */
+  margin: number
+  /** profit banked so far */
+  realized: number
+}
+
+export interface AcceptanceStatsClient {
+  id: number
+  name: string
+  phone: string
+  goods_count: number
+  weight: number
+  total: number
+  paid: number
+  unpaid: number
+}
+
+export interface AcceptanceStatsDetail extends AcceptanceStats {
+  price_per_kg: number
+  waste_rate: number
+  paid_weight: number
+  unpaid_weight: number
+  first_payment_at: string | null
+  last_payment_at: string | null
+  clients: AcceptanceStatsClient[]
+}
+
 export interface ReportCollector {
   collector: string
   count: number
