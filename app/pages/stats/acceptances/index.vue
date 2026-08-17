@@ -19,9 +19,13 @@ const FILTERS: { value: Filter, label: string }[] = [
   { value: 'done', label: 'Выкуплены' },
 ]
 
+function isRedeemed(a: AcceptanceStats) {
+  return a.realized > 0
+}
+
 const visible = computed(() => {
   if (filter.value === 'debt') return items.value.filter(a => a.unpaid_revenue > 0)
-  if (filter.value === 'done') return items.value.filter(a => a.unpaid_revenue === 0 && a.goods_count > 0)
+  if (filter.value === 'done') return items.value.filter(isRedeemed)
   return items.value
 })
 
@@ -170,10 +174,12 @@ function rateTextClass(rate: number) {
                 <span class="text-muted">
                   {{ formatPrice(a.paid_revenue) }} из {{ formatPrice(a.total_revenue) }}
                 </span>
-                <span v-if="a.unpaid_revenue > 0" class="font-bold text-danger">
-                  −{{ formatPrice(a.unpaid_revenue) }}
+                <span
+                  class="font-bold tabular-nums"
+                  :class="isRedeemed(a) ? 'text-success' : 'text-danger'"
+                >
+                  {{ isRedeemed(a) ? '+' : '' }}{{ formatPrice(a.realized) }}
                 </span>
-                <span v-else-if="a.goods_count" class="font-bold text-success">Выкуплена</span>
               </div>
             </NuxtLink>
           </li>

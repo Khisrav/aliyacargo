@@ -1,6 +1,7 @@
 import { createError, getQuery } from 'h3'
 import { requireTelegramAuth } from '../utils/auth'
-import { resolvePeriod, STATS_PERIODS, type StatsPeriod, dateKey } from '../utils/period'
+import { resolvePeriod, STATS_PERIODS, type StatsPeriod } from '../utils/period'
+import { businessDateKey } from '../utils/reports'
 import { useSupabaseAdmin } from '../utils/supabase'
 
 export default defineEventHandler(async (event) => {
@@ -8,7 +9,7 @@ export default defineEventHandler(async (event) => {
   const query = getQuery(event)
   const periodRaw = typeof query.period === 'string' ? query.period : 'all'
   const period = (STATS_PERIODS.has(periodRaw as StatsPeriod) ? periodRaw : 'all') as StatsPeriod
-  const { from, to } = resolvePeriod(period, query.dateFrom, query.dateTo)
+  const { from, to, fromKey, toKey } = resolvePeriod(period, query.dateFrom, query.dateTo)
 
   const supabase = useSupabaseAdmin()
 
@@ -19,7 +20,7 @@ export default defineEventHandler(async (event) => {
     .limit(10000)
 
   if (from) goodsQuery = goodsQuery.gte('created_at', from.toISOString())
-  if (to) goodsQuery = goodsQuery.lte('created_at', to.toISOString())
+  if (to) goodsQuery = goodsQuery.lt('created_at', to.toISOString())
 
   let accQuery = supabase
     .from('acceptances')
@@ -27,8 +28,8 @@ export default defineEventHandler(async (event) => {
     .is('deleted_at', null)
     .limit(2000)
 
-  if (from) accQuery = accQuery.gte('accepted_at', dateKey(from))
-  if (to) accQuery = accQuery.lte('accepted_at', dateKey(to))
+  if (fromKey) accQuery = accQuery.gte('accepted_at', fromKey)
+  if (toKey) accQuery = accQuery.lte('accepted_at', toKey)
 
   let financeQuery = supabase
     .from('finance_records')
@@ -37,7 +38,7 @@ export default defineEventHandler(async (event) => {
     .limit(5000)
 
   if (from) financeQuery = financeQuery.gte('created_at', from.toISOString())
-  if (to) financeQuery = financeQuery.lte('created_at', to.toISOString())
+  if (to) financeQuery = financeQuery.lt('created_at', to.toISOString())
 
   const [goodsRes, accRes, finRes] = await Promise.all([goodsQuery, accQuery, financeQuery])
 
@@ -105,7 +106,7 @@ export default defineEventHandler(async (event) => {
 
   const dailyMap = new Map<string, { date: string, count: number, weight: number, revenue: number, paidRevenue: number }>()
   for (const g of goods) {
-    const date = String(g.created_at).slice(0, 10)
+    const date = businessDateKey(new Date(g.created_at))
     const cur = dailyMap.get(date) ?? { date, count: 0, weight: 0, revenue: 0, paidRevenue: 0 }
     cur.count += 1
     cur.weight += Number(g.weight)
@@ -128,8 +129,8 @@ export default defineEventHandler(async (event) => {
 
   return {
     period,
-    periodFrom: from ? dateKey(from) : null,
-    periodTo: to ? dateKey(to) : null,
+    periodFrom: fromKey,
+    periodTo: toKey,
     totalCount: goods.length,
     totalWeight: Math.round(totalWeight * 1000) / 1000,
     totalRevenue: Math.round(totalRevenue * 100) / 100,

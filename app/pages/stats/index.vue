@@ -53,12 +53,17 @@ const PERIOD_OPTIONS: { value: Period, label: string }[] = [
 ]
 
 function todayKey() {
-  return new Date().toISOString().slice(0, 10)
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Dushanbe',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date())
 }
 
 function monthStartKey() {
-  const d = new Date()
-  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1)).toISOString().slice(0, 10)
+  const today = todayKey()
+  return `${today.slice(0, 8)}01`
 }
 
 const { initData, ready } = useTelegram()
