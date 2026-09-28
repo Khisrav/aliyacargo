@@ -4,6 +4,66 @@ import { useSupabaseAdmin } from '../../utils/supabase'
 import type { ClientListItem } from '#shared/types/domain'
 import { normalizePhone } from '#shared/utils/phone'
 
+const PAGE_SIZE = 1000
+const MAX_PAGES = 100
+const CLIENT_ID_BATCH = 150
+
+type PageResult<T> = PromiseLike<{ data: T[] | null, error: { message: string } | null }>
+
+async function fetchAllPages<T extends { id?: number | string }>(load: (from: number, to: number) => PageResult<T>) {
+  const rows: T[] = []
+  let previousFirstId: number | null = null
+
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const from = page * PAGE_SIZE
+    const { data, error } = await load(from, from + PAGE_SIZE - 1)
+    if (error) {
+      throw createError({ statusCode: 500, statusMessage: error.message })
+    }
+
+    const batch = data ?? []
+    if (!batch.length) break
+
+    const firstId = Number(batch[0]?.id)
+    if (previousFirstId != null && firstId === previousFirstId) break
+    if (Number.isFinite(firstId)) previousFirstId = firstId
+
+    rows.push(...batch)
+    if (batch.length < PAGE_SIZE) break
+  }
+
+  return rows
+}
+
+async function fetchGoodsForClients(
+  supabase: ReturnType<typeof useSupabaseAdmin>,
+  clientIds: number[],
+) {
+  const goods: Array<{
+    client_id: number
+    weight: number
+    price: number
+    has_paid: boolean
+    created_at: string
+  }> = []
+
+  for (let offset = 0; offset < clientIds.length; offset += CLIENT_ID_BATCH) {
+    const ids = clientIds.slice(offset, offset + CLIENT_ID_BATCH)
+    const page = await fetchAllPages((from, to) =>
+      supabase
+        .from('goods')
+        .select('id, client_id, weight, price, has_paid, created_at')
+        .in('client_id', ids)
+        .is('deleted_at', null)
+        .order('id', { ascending: true })
+        .range(from, to),
+    )
+    goods.push(...page)
+  }
+
+  return goods
+}
+
 export default defineEventHandler(async (event) => {
   requireTelegramAuth(event)
   const query = getQuery(event)
@@ -11,39 +71,35 @@ export default defineEventHandler(async (event) => {
   const debt = typeof query.debt === 'string' ? query.debt : 'all'
 
   const supabase = useSupabaseAdmin()
-  let clientsQuery = supabase
-    .from('clients')
-    .select('id, name, phone, created_at, updated_at, deleted_at')
-    .is('deleted_at', null)
-    .order('name', { ascending: true })
-    .limit(2000)
+  const clients = await fetchAllPages<{
+    id: number
+    name: string
+    phone: string
+    created_at: string
+    updated_at: string
+    deleted_at: string | null
+  }>((from, to) => {
+    let clientsQuery = supabase
+      .from('clients')
+      .select('id, name, phone, created_at, updated_at, deleted_at')
+      .is('deleted_at', null)
 
-  if (search) {
-    const digits = normalizePhone(search)
-    clientsQuery = clientsQuery.or(
-      digits
-        ? `name.ilike.%${search}%,phone.ilike.%${digits}%`
-        : `name.ilike.%${search}%`,
-    )
-  }
+    if (search) {
+      const digits = normalizePhone(search)
+      clientsQuery = clientsQuery.or(
+        digits
+          ? `name.ilike.%${search}%,phone.ilike.%${digits}%`
+          : `name.ilike.%${search}%`,
+      )
+    }
 
-  const { data: clients, error } = await clientsQuery
-  if (error) {
-    throw createError({ statusCode: 500, statusMessage: error.message })
-  }
+    return clientsQuery.order('id', { ascending: true }).range(from, to)
+  })
 
-  const clientIds = (clients ?? []).map(c => c.id)
+  const clientIds = clients.map(c => Number(c.id))
   if (!clientIds.length) return []
 
-  const { data: goods, error: goodsError } = await supabase
-    .from('goods')
-    .select('client_id, weight, price, has_paid, created_at')
-    .in('client_id', clientIds)
-    .is('deleted_at', null)
-
-  if (goodsError) {
-    throw createError({ statusCode: 500, statusMessage: goodsError.message })
-  }
+  const goods = await fetchGoodsForClients(supabase, clientIds)
 
   const stats = new Map<number, {
     goodsCount: number

@@ -14,7 +14,13 @@ const clients = ref<ClientListItem[]>([])
 const debtFilter = ref<'with_debt' | 'no_debt'>('with_debt')
 const search = ref('')
 const copying = ref(false)
+const copyParts = ref<string[] | null>(null)
+const copyPartIndex = ref(0)
+const copyClientCount = ref(0)
 const toast = ref<{ type: 'success' | 'error', message: string } | null>(null)
+
+// A Telegram message keeps at most 4096 characters. Longer lists are copied in parts.
+const TELEGRAM_MESSAGE_LIMIT = 4096
 
 let searchDebounce: ReturnType<typeof setTimeout> | undefined
 
@@ -36,6 +42,8 @@ watch(search, () => {
 })
 
 async function load() {
+  copyParts.value = null
+  copyPartIndex.value = 0
   state.value = state.value === 'ok' ? 'ok' : 'loading'
   try {
     const params = new URLSearchParams({ debt: debtFilter.value })
@@ -69,37 +77,123 @@ function formatDebtRows(rows: ClientListItem[]) {
     .join('\n')
 }
 
+function chunkLines(text: string, limit: number) {
+  const lines = text.split('\n')
+  const chunks: string[] = []
+  let current = ''
+
+  for (const line of lines) {
+    if (!current) {
+      current = line
+      continue
+    }
+    if (current.length + 1 + line.length > limit) {
+      chunks.push(current)
+      current = line
+    }
+    else {
+      current += `\n${line}`
+    }
+  }
+
+  if (current) chunks.push(current)
+  return chunks
+}
+
+function lineRange(chunks: string[], index: number) {
+  let start = 1
+  for (let i = 0; i < index; i++) start += chunks[i]!.split('\n').length
+  const count = chunks[index]!.split('\n').length
+  return { start, end: start + count - 1 }
+}
+
+function resetCopyParts() {
+  copyParts.value = null
+  copyPartIndex.value = 0
+}
+
 async function copyToClipboard(text: string) {
   try {
     await navigator.clipboard.writeText(text)
+    return
   }
-  catch {
-    const textarea = document.createElement('textarea')
-    textarea.value = text
-    textarea.style.position = 'fixed'
-    textarea.style.opacity = '0'
-    document.body.appendChild(textarea)
-    textarea.select()
-    document.execCommand('copy')
+  catch { /* Telegram WebView often blocks the async clipboard API */ }
+
+  const textarea = document.createElement('textarea')
+  textarea.value = text
+  textarea.setAttribute('readonly', '')
+  textarea.style.position = 'fixed'
+  textarea.style.top = '0'
+  textarea.style.left = '0'
+  textarea.style.width = '2em'
+  textarea.style.height = '2em'
+  textarea.style.padding = '0'
+  textarea.style.border = 'none'
+  textarea.style.outline = 'none'
+  textarea.style.boxShadow = 'none'
+  textarea.style.background = 'transparent'
+  textarea.style.fontSize = '16px'
+  document.body.appendChild(textarea)
+
+  const selection = document.getSelection()
+  const saved = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null
+  textarea.focus()
+  textarea.select()
+  textarea.setSelectionRange(0, text.length)
+
+  let ok = false
+  try {
+    ok = document.execCommand('copy')
+  }
+  finally {
     textarea.remove()
+    if (saved && selection) {
+      selection.removeAllRanges()
+      selection.addRange(saved)
+    }
   }
+
+  if (!ok) throw new Error('Не удалось скопировать')
 }
 
 async function copyDebtList() {
   if (copying.value) return
   copying.value = true
   try {
-    let rows = clients.value
-    if (debtFilter.value !== 'with_debt') {
-      rows = await apiFetch<ClientListItem[]>('/api/clients?debt=with_debt')
+    let parts = copyParts.value
+    if (!parts) {
+      const fullDebtList = debtFilter.value === 'with_debt' && !search.value.trim()
+      const rows = fullDebtList
+        ? clients.value.filter(c => c.unpaidCount > 0)
+        : (await apiFetch<ClientListItem[]>('/api/clients?debt=with_debt')).filter(c => c.unpaidCount > 0)
+      if (!rows.length) throw new Error('Нет клиентов с долгом')
+      copyClientCount.value = rows.length
+      parts = chunkLines(formatDebtRows(rows), TELEGRAM_MESSAGE_LIMIT)
+      if (parts.length === 1) {
+        await copyToClipboard(parts[0]!)
+        showToast('success', `Скопировано: ${rows.length}`)
+        return
+      }
+      copyParts.value = parts
+      copyPartIndex.value = 0
     }
-    rows = rows.filter(c => c.unpaidCount > 0)
-    if (!rows.length) throw new Error('Нет клиентов с долгом')
 
-    await copyToClipboard(formatDebtRows(rows))
-    showToast('success', `Скопировано: ${rows.length}`)
+    const index = copyPartIndex.value
+    await copyToClipboard(parts[index]!)
+    const { start, end } = lineRange(parts, index)
+    const last = index + 1 >= parts.length
+    if (last) resetCopyParts()
+    else copyPartIndex.value = index + 1
+
+    showToast(
+      'success',
+      last
+        ? `Скопированы ${start}–${end} из ${copyClientCount.value}`
+        : `Скопированы ${start}–${end} из ${copyClientCount.value}. Нажмите ещё раз`,
+    )
   }
   catch (e) {
+    resetCopyParts()
     showToast('error', e instanceof Error ? e.message : 'Не удалось скопировать')
   }
   finally {
@@ -138,7 +232,7 @@ async function removeClient(client: ClientListItem, event: Event) {
           :disabled="copying || state !== 'ok'"
           @click="copyDebtList"
         >
-          {{ copying ? '…' : 'Копировать' }}
+          {{ copying ? '…' : copyParts ? `Часть ${copyPartIndex + 1}/${copyParts.length}` : 'Копировать' }}
         </button>
       </template>
     </PageHeader>
