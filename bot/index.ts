@@ -1,6 +1,8 @@
 import { Bot, InlineKeyboard } from 'grammy'
 import { createClient } from '@supabase/supabase-js'
 import { formatPhone, isValidPhone, normalizePhone } from '../shared/utils/phone'
+import { normalizeTrackCode } from '../shared/utils/tracks'
+import { isAllowedNickname } from '../server/utils/telegram'
 
 const token = process.env.TELEGRAM_BOT_TOKEN
 const webAppUrl = process.env.NUXT_PUBLIC_APP_URL
@@ -20,6 +22,12 @@ if (!webAppUrl) {
 if (!supabaseUrl || !supabaseKey) {
   console.error('SUPABASE_URL and SUPABASE_SERVICE_KEY are required for client lookup')
   process.exit(1)
+}
+
+const allowedNicknames = process.env.ALLOWED_NICKNAMES || ''
+
+function isWorker(username: string | undefined) {
+  return isAllowedNickname(username, allowedNicknames)
 }
 
 const bot = new Bot(token)
@@ -101,6 +109,90 @@ function buildLookupMessage(
   return lines.join('\n')
 }
 
+function formatWhen(iso: string) {
+  return new Date(iso).toLocaleString('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    year: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+async function lookupByTrack(code: string) {
+  const { data: links, error: linkError } = await supabase
+    .from('good_tracks')
+    .select('good_id')
+    .eq('code', code)
+
+  if (linkError) throw new Error(linkError.message)
+
+  const ids = [...new Set((links ?? []).map(link => Number(link.good_id)))]
+  if (!ids.length) return null
+
+  const { data: goods, error: goodsError } = await supabase
+    .from('goods')
+    .select('name, weight, price, has_paid, paid_at, created_at, clients ( name, phone )')
+    .in('id', ids)
+    .is('deleted_at', null)
+    .order('created_at', { ascending: false })
+    .limit(1)
+
+  if (goodsError) throw new Error(goodsError.message)
+  return goods?.[0] ?? null
+}
+
+function buildTrackMessage(
+  code: string,
+  row: {
+    name: string
+    weight: number
+    price: number
+    has_paid: boolean
+    paid_at: string | null
+    created_at: string
+    clients: { name: string, phone: string } | { name: string, phone: string }[] | null
+  },
+) {
+  const client = Array.isArray(row.clients) ? row.clients[0] : row.clients
+  const lines = [
+    row.has_paid ? '✓ Оплачено' : '• Не оплачено',
+    code,
+    '',
+  ]
+  if (client?.name) lines.push(`👤 ${client.name}`)
+  if (client?.phone) lines.push(`📞 +992 ${formatPhone(client.phone)}`)
+  if (client?.name || client?.phone) lines.push('')
+  lines.push(
+    `Вес: ${Number(row.weight)} кг`,
+    `Сумма: ${formatMoney(Number(row.price))}`,
+    `Создан: ${formatWhen(row.created_at)}`,
+    `Оплачен: ${row.paid_at ? formatWhen(row.paid_at) : '—'}`,
+  )
+  return lines.join('\n')
+}
+
+async function replyTrack(ctx: { reply: (text: string) => Promise<unknown> }, raw: string) {
+  const code = normalizeTrackCode(raw)
+  if (!code) {
+    await ctx.reply('Отправьте трек-номер или номер телефона (9 цифр без +992).')
+    return
+  }
+
+  try {
+    const row = await lookupByTrack(code)
+    if (!row) {
+      await ctx.reply(`Трек ${code} не найден.`)
+      return
+    }
+    await ctx.reply(buildTrackMessage(code, row))
+  }
+  catch (err) {
+    console.error('Track lookup error:', err)
+    await ctx.reply('Не удалось получить данные. Попробуйте позже.')
+  }
+}
+
 const trackUrl = `${webAppUrl.replace(/\/$/, '')}/track`
 
 bot.command('start', async (ctx) => {
@@ -111,7 +203,7 @@ bot.command('start', async (ctx) => {
 
   await ctx.reply(
     'Добро пожаловать в Aliya Cargo!\n\n'
-    + '👷 Сотрудники — откройте приложение для работы.\n'
+    + '👷 Сотрудники — откройте приложение или отправьте трек-номер.\n'
     + '👤 Клиенты — нажмите «Мой груз» или отправьте номер телефона (9 цифр без +992).\n\n'
     + 'Пример: 901123456',
     { reply_markup: keyboard },
@@ -148,26 +240,31 @@ bot.on('message:text', async (ctx) => {
   if (text.startsWith('/')) return
 
   const phone = normalizePhone(text)
-  if (!isValidPhone(phone)) {
-    await ctx.reply(
-      'Отправьте номер телефона без +992 (9 цифр), например: 901123456',
-    )
+  if (isValidPhone(phone)) {
+    try {
+      const result = await lookupByPhone(phone)
+      if (!result) {
+        await ctx.reply(`По номеру +992 ${formatPhone(phone)} записей не найдено.`)
+        return
+      }
+
+      await ctx.reply(buildLookupMessage(result.client, result.goods))
+    }
+    catch (err) {
+      console.error('Lookup error:', err)
+      await ctx.reply('Не удалось получить данные. Попробуйте позже.')
+    }
     return
   }
 
-  try {
-    const result = await lookupByPhone(phone)
-    if (!result) {
-      await ctx.reply(`По номеру +992 ${formatPhone(phone)} записей не найдено.`)
-      return
-    }
+  if (isWorker(ctx.from?.username)) {
+    await replyTrack(ctx, text)
+    return
+  }
 
-    await ctx.reply(buildLookupMessage(result.client, result.goods))
-  }
-  catch (err) {
-    console.error('Lookup error:', err)
-    await ctx.reply('Не удалось получить данные. Попробуйте позже.')
-  }
+  await ctx.reply(
+    'Отправьте номер телефона без +992 (9 цифр), например: 901123456',
+  )
 })
 
 bot.catch((err) => {

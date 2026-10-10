@@ -94,3 +94,35 @@ export function mapAcceptanceRow(
     goods_count: extras?.goods_count,
   }
 }
+
+/** Newest non-deleted package that carries this exact track code. */
+export async function findGoodByTrackCode(code: string): Promise<Good | null> {
+  const supabase = useSupabaseAdmin()
+
+  const { data: links, error: linkError } = await supabase
+    .from('good_tracks')
+    .select('good_id')
+    .eq('code', code)
+
+  if (linkError) {
+    throw createError({ statusCode: 500, statusMessage: linkError.message })
+  }
+
+  const ids = [...new Set((links ?? []).map(link => Number(link.good_id)))]
+  if (!ids.length) return null
+
+  const { data, error } = await supabase
+    .from('goods')
+    .select(GOODS_SELECT)
+    .in('id', ids)
+    .is('deleted_at', null)
+    .order('created_at', { ascending: false })
+    .limit(1)
+
+  if (error) {
+    throw createError({ statusCode: 500, statusMessage: error.message })
+  }
+
+  const row = data?.[0]
+  return row ? mapGoodRow(row as Record<string, any>) : null
+}

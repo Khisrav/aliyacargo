@@ -1,7 +1,9 @@
 {
   "track": {
     "title": "Mening yukim",
-    "subtitle": "Yozuvlaringizni ko‘rish uchun telefon raqamingizni kiriting",
+    "subtitle": "Yukni telefon yoki trek raqami orqali toping",
+    "byPhone": "Telefon",
+    "byCode": "Trek",
     "phone": "Telefon",
     "phoneHint": "+992’siz",
     "search": "Topish",
@@ -16,6 +18,11 @@
     "history": "Tarix",
     "paid": "To‘langan",
     "unpaid": "To‘lanmagan",
+    "trackNumber": "Trek raqami",
+    "trackPlaceholder": "Raqamni kiriting",
+    "created": "Qabul qilingan",
+    "paidOn": "To‘langan",
+    "codeNotFound": "{code} trek topilmadi.",
     "noItems": "Yozuvlar yo‘q",
     "viewOnly": "Faqat ko‘rish. To‘lov holatini faqat xodimlar o‘zgartirishi mumkin.",
     "kg": "kg"
