@@ -269,16 +269,19 @@ async function removeClient(client: ClientListItem, event: Event) {
         :title="debtFilter === 'with_debt' ? 'Нет должников' : 'Нет клиентов без долга'"
       />
       <ul v-else class="space-y-2">
-        <li v-for="c in clients" :key="c.id" class="relative">
-          <NuxtLink :to="`/clients/${c.id}`" class="ui-card flex items-center gap-3 px-4 py-3.5 pr-14 transition active:scale-[0.99]">
+        <li v-for="c in clients" :key="c.id" class="ui-card flex items-center gap-2 py-3.5 pl-4 pr-2">
+          <NuxtLink :to="`/clients/${c.id}`" class="flex min-w-0 flex-1 items-center gap-3">
             <div class="min-w-0 flex-1">
               <p class="truncate text-[15px] font-extrabold text-ink">{{ c.name }}</p>
-              <p class="mt-0.5 text-xs font-medium text-muted">
-                <span class="mr-1 inline-block rounded-full border border-white/70 bg-white/50 px-2 py-0.5 font-bold tabular-nums">
+              <p class="mt-1">
+                <span class="inline-block rounded-full border border-white/70 bg-white/50 px-2 py-0.5 text-xs font-bold tabular-nums text-ink/70">
                   {{ formatPhone(c.phone) }}
                 </span>
-                {{ c.goodsCount }} тов. · {{ formatWeight(c.totalWeight) }}
               </p>
+              <div class="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+                <UiFact icon="box" :value="`${c.goodsCount} тов.`" />
+                <UiFact icon="weight" :value="formatWeight(c.totalWeight)" />
+              </div>
             </div>
             <div class="shrink-0 text-right">
               <p
@@ -294,7 +297,7 @@ async function removeClient(client: ClientListItem, event: Event) {
           </NuxtLink>
           <button
             type="button"
-            class="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-xl bg-danger-soft text-danger"
+            class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-rose-100 bg-danger-soft text-danger"
             aria-label="Удалить"
             @click="removeClient(c, $event)"
           >

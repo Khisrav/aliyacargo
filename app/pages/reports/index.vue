@@ -84,9 +84,11 @@ async function load() {
             >
               <div class="min-w-0 flex-1">
                 <p class="text-[15px] font-extrabold text-ink">{{ formatDate(r.report_date) }}</p>
-                <p class="mt-0.5 text-xs font-medium text-muted">
-                  {{ r.goods_count }} тов. · {{ formatWeight(r.goods_weight) }} · собрано {{ r.payments_count }}
-                </p>
+                <div class="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <UiFact icon="box" :value="`${r.goods_count} тов.`" />
+                  <UiFact icon="weight" :value="formatWeight(r.goods_weight)" />
+                  <UiFact icon="price" :value="`собрано ${r.payments_count}`" />
+                </div>
                 <p v-if="r.debt_revenue > 0" class="mt-0.5 text-[11px] font-bold text-muted">
                   Остаток долга {{ formatPrice(r.debt_revenue) }}
                 </p>

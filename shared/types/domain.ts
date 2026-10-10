@@ -26,6 +26,12 @@ export interface Acceptance {
   goods_count?: number
 }
 
+export interface GoodTrack {
+  id: number
+  code: string
+  created_at: string
+}
+
 export interface Good {
   id: number
   acceptance_id: number
@@ -41,6 +47,7 @@ export interface Good {
   /** joined */
   client_name: string
   phone: string
+  tracks: GoodTrack[]
 }
 
 export interface FinanceRecord {

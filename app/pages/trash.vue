@@ -196,9 +196,10 @@ async function restoreFinance(item: TrashFinance) {
           <li v-for="item in trash.clients" :key="`c-${item.id}`" class="ui-card flex items-center gap-3 px-4 py-3.5">
             <div class="min-w-0 flex-1">
               <p class="truncate text-[15px] font-bold text-ink">{{ item.name }}</p>
-              <p class="mt-0.5 text-xs text-muted">
-                {{ formatPhone(item.phone) }} · {{ formatDateTime(item.deleted_at) }}
-              </p>
+              <div class="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+                <UiFact icon="phone" :value="formatPhone(item.phone)" />
+                <UiFact icon="date" :value="formatDateTime(item.deleted_at)" />
+              </div>
               <span class="mt-1.5 inline-flex rounded-lg bg-accent-soft px-2 py-0.5 text-[11px] font-bold text-amber-800">
                 {{ item.daysLeft }} дн.
               </span>
@@ -219,11 +220,12 @@ async function restoreFinance(item: TrashFinance) {
           <li v-for="item in trash.goods" :key="`g-${item.id}`" class="ui-card flex items-center gap-3 px-4 py-3.5">
             <div class="min-w-0 flex-1">
               <p class="truncate text-[15px] font-bold text-ink">{{ item.name || 'Без имени' }}</p>
-              <p class="mt-0.5 text-xs text-muted">
-                <span v-if="item.phone" class="mr-1 font-bold tabular-nums">{{ formatPhone(item.phone) }}</span>
-                {{ formatWeight(item.weight) }} · {{ formatPrice(item.price) }}
-              </p>
-              <p class="mt-0.5 text-[11px] text-slate-400">удалено {{ formatDateTime(item.deleted_at) }}</p>
+              <div class="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+                <UiFact v-if="item.phone" icon="phone" :value="formatPhone(item.phone)" />
+                <UiFact icon="weight" :value="formatWeight(item.weight)" />
+                <UiFact icon="price" :value="formatPrice(item.price)" />
+                <UiFact icon="date" :value="formatDateTime(item.deleted_at)" />
+              </div>
               <span class="mt-1.5 inline-flex rounded-lg bg-accent-soft px-2 py-0.5 text-[11px] font-bold text-amber-800">
                 {{ item.daysLeft }} дн.
               </span>
@@ -244,11 +246,16 @@ async function restoreFinance(item: TrashFinance) {
           <li v-for="item in trash.finance" :key="`f-${item.id}`" class="ui-card flex items-center gap-3 px-4 py-3.5">
             <div class="min-w-0 flex-1">
               <p class="truncate text-[15px] font-bold text-ink">{{ item.note }}</p>
-              <p class="mt-0.5 text-xs text-muted">
-                {{ item.recordType === 'income' ? 'Доход' : 'Расход' }}
-                · {{ formatPrice(item.amount) }}
-                · {{ formatDateTime(item.deleted_at) }}
-              </p>
+              <div class="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+                <span
+                  class="text-xs font-bold"
+                  :class="item.recordType === 'income' ? 'text-success' : 'text-danger'"
+                >
+                  {{ item.recordType === 'income' ? 'Доход' : 'Расход' }}
+                </span>
+                <UiFact icon="price" :value="formatPrice(item.amount)" />
+                <UiFact icon="date" :value="formatDateTime(item.deleted_at)" />
+              </div>
               <span class="mt-1.5 inline-flex rounded-lg bg-accent-soft px-2 py-0.5 text-[11px] font-bold text-amber-800">
                 {{ item.daysLeft }} дн.
               </span>

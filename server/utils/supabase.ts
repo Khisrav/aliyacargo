@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { createError } from 'h3'
-import type { Acceptance, Good } from '#shared/types/domain'
+import type { Acceptance, Good, GoodTrack } from '#shared/types/domain'
 
 export function useSupabaseAdmin() {
   const config = useRuntimeConfig()
@@ -35,8 +35,25 @@ export const GOODS_SELECT = `
     phone,
     name,
     deleted_at
+  ),
+  good_tracks (
+    id,
+    code,
+    created_at
   )
 `
+
+function mapTracks(row: Record<string, any>): GoodTrack[] {
+  const raw = row.good_tracks
+  if (!Array.isArray(raw)) return []
+  return raw
+    .map(track => ({
+      id: Number(track.id),
+      code: String(track.code ?? ''),
+      created_at: String(track.created_at),
+    }))
+    .sort((a, b) => a.created_at.localeCompare(b.created_at) || a.id - b.id)
+}
 
 export function mapGoodRow(row: Record<string, any>): Good {
   const client = row.clients ?? {}
@@ -54,6 +71,7 @@ export function mapGoodRow(row: Record<string, any>): Good {
     updated_at: String(row.updated_at ?? row.created_at),
     client_name: String(client.name ?? ''),
     phone: String(client.phone ?? ''),
+    tracks: mapTracks(row),
   }
 }
 

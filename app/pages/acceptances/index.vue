@@ -74,14 +74,19 @@ async function load() {
             class="ui-card block px-4 py-4 transition active:scale-[0.99]"
           >
             <div class="flex items-start justify-between gap-3">
-              <div>
+              <div class="min-w-0 flex-1">
                 <p class="text-[15px] font-extrabold text-ink">
                   {{ formatDate(item.accepted_at) }}
                 </p>
-                <p class="mt-1 text-xs font-medium text-muted">
-                  {{ formatWeight(item.total_weight) }} · {{ item.goods_count ?? 0 }} тов.
-                  <span v-if="item.sorted_weight != null"> · отсорт. {{ formatWeight(item.sorted_weight) }}</span>
-                </p>
+                <div class="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <UiFact icon="weight" :value="formatWeight(item.total_weight)" />
+                  <UiFact icon="box" :value="`${item.goods_count ?? 0} тов.`" />
+                  <UiFact
+                    v-if="item.sorted_weight != null"
+                    icon="weight"
+                    :value="`отсорт. ${formatWeight(item.sorted_weight)}`"
+                  />
+                </div>
               </div>
               <span
                 class="rounded-full px-3 py-1 text-[11px] font-extrabold"

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { Good } from '#shared/types/domain'
 
+const route = useRoute()
 const { initData, ready, haptic } = useTelegram()
 const { apiFetch } = useApi(initData)
 const { requireWorker } = useWorkerGate()
@@ -67,19 +68,32 @@ function showToast(type: 'success' | 'error', message: string) {
   setTimeout(() => { toast.value = null }, 2500)
 }
 
-async function togglePaid(item: Good) {
+function openGood(item: Good) {
+  navigateTo({ path: `/goods/${item.id}`, query: { from: route.fullPath } })
+}
+
+function requestPay(item: Good) {
+  if (item.has_paid) {
+    void clearPaid(item)
+    return
+  }
+  openGood(item)
+}
+
+async function clearPaid(item: Good) {
   try {
     const updated = await apiFetch<Good>(`/api/goods/${item.id}`, {
       method: 'PATCH',
-      body: JSON.stringify({ has_paid: !item.has_paid }),
+      body: JSON.stringify({ has_paid: false }),
     })
     goods.value = goods.value.filter(g => g.id !== updated.id)
-    showToast('success', updated.has_paid ? 'Отмечено оплаченным' : 'Снята оплата')
+    showToast('success', 'Снята оплата')
   }
   catch (e) {
     showToast('error', e instanceof Error ? e.message : 'Не удалось обновить')
   }
 }
+
 </script>
 
 <template>
@@ -94,7 +108,7 @@ async function togglePaid(item: Good) {
           :class="paidFilter === 'unpaid' ? 'bg-brand text-white shadow' : 'text-muted'"
           @click="paidFilter = 'unpaid'"
         >
-          Не оплачено
+          Долг
         </button>
         <button
           type="button"
@@ -139,11 +153,16 @@ async function togglePaid(item: Good) {
           :key="item.id"
           :name="item.client_name || item.name"
           :phone="item.phone"
-          :meta="`${formatWeight(item.weight)} · ${formatPrice(item.price)} · ${formatDateTime(item.created_at)}`"
+          :weight="formatWeight(item.weight)"
+          :price="formatPrice(item.price)"
+          :when="formatDateTime(item.created_at)"
           :has-paid="item.has_paid"
           :initiator="item.payment_accepted_by"
+          :paid-at="item.paid_at ? formatDateTime(item.paid_at) : ''"
+          :track-count="item.tracks.length"
           :show-trash="false"
-          @toggle-paid="togglePaid(item)"
+          @toggle-paid="requestPay(item)"
+          @view-tracks="openGood(item)"
         />
       </ul>
     </div>

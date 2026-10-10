@@ -189,11 +189,23 @@ async function submit() {
   }
 }
 
-async function togglePaid(item: Good) {
+function openGood(item: Good) {
+  navigateTo({ path: `/goods/${item.id}`, query: { from: route.fullPath } })
+}
+
+function requestPay(item: Good) {
+  if (item.has_paid) {
+    void clearPaid(item)
+    return
+  }
+  openGood(item)
+}
+
+async function clearPaid(item: Good) {
   try {
     const updated = await apiFetch<Good>(`/api/goods/${item.id}`, {
       method: 'PATCH',
-      body: JSON.stringify({ has_paid: !item.has_paid }),
+      body: JSON.stringify({ has_paid: false }),
     })
     const idx = goods.value.findIndex(g => g.id === item.id)
     if (idx !== -1) goods.value[idx] = updated
@@ -464,12 +476,17 @@ async function closeAcceptance() {
             :key="item.id"
             :name="item.client_name || item.name"
             :phone="item.phone"
-            :meta="`${formatWeight(item.weight)} · ${formatPrice(item.price)} · ${formatDateTime(item.created_at)}`"
+            :weight="formatWeight(item.weight)"
+            :price="formatPrice(item.price)"
+            :when="formatDateTime(item.created_at)"
             :has-paid="item.has_paid"
             :initiator="item.payment_accepted_by"
+            :paid-at="item.paid_at ? formatDateTime(item.paid_at) : ''"
+            :track-count="item.tracks.length"
             :show-edit="acceptance.status === 'open'"
             :show-trash="acceptance.status === 'open'"
-            @toggle-paid="togglePaid(item)"
+            @toggle-paid="requestPay(item)"
+            @view-tracks="openGood(item)"
             @edit="openEdit(item)"
             @remove="removeGood(item)"
           />

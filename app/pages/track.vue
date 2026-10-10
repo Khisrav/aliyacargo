@@ -152,8 +152,9 @@ const statItems = computed(() => {
               <GoodsRow
                 v-for="(item, index) in result.goods"
                 :key="`${item.created_at}-${index}`"
-                :title="`${formatters.formatWeight(item.weight, $t('track.kg'))} · ${formatters.formatPrice(item.price)}`"
-                :meta="formatters.formatDateTime(item.created_at)"
+                :weight="formatters.formatWeight(item.weight, $t('track.kg'))"
+                :price="formatters.formatPrice(item.price)"
+                :when="formatters.formatDateTime(item.created_at)"
                 :has-paid="item.has_paid"
                 :paid-label="$t('track.paid')"
                 :unpaid-label="$t('track.unpaid')"
