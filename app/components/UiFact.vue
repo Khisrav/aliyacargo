@@ -1,17 +1,23 @@
 <script setup lang="ts">
-withDefaults(defineProps<{
+defineProps<{
   icon: 'weight' | 'price' | 'date' | 'phone' | 'box' | 'user'
   value: string | number
-  emphasis?: boolean
-}>(), {
-  emphasis: false,
-})
+}>()
+
+const tone = {
+  weight: 'text-teal-700/80',
+  price: 'text-amber-700/80',
+  date: 'text-sky-700/70',
+  phone: 'text-slate-500',
+  box: 'text-teal-600/70',
+  user: 'text-slate-400',
+}
 </script>
 
 <template>
   <span
-    class="inline-flex items-center gap-1"
-    :class="emphasis ? 'text-sm font-extrabold text-ink' : 'text-xs font-semibold text-muted'"
+    class="inline-flex items-center gap-1 text-[13px] font-normal"
+    :class="tone[icon]"
   >
     <svg
       class="shrink-0"

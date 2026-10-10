@@ -2,7 +2,7 @@
 import { formatPhone } from '#shared/utils/phone'
 import { trackCountLabel } from '#shared/utils/tracks'
 
-const props = withDefaults(defineProps<{
+withDefaults(defineProps<{
   name?: string
   phone?: string
   title?: string
@@ -37,8 +37,6 @@ defineEmits<{
   edit: []
   viewTracks: []
 }>()
-
-const leadWithFacts = computed(() => !props.name && !props.title)
 </script>
 
 <template>
@@ -53,9 +51,9 @@ const leadWithFacts = computed(() => !props.name && !props.title)
         </span>
       </p>
       <div v-if="weight || price || when" class="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <UiFact v-if="weight" icon="weight" :value="weight" :emphasis="leadWithFacts" />
-        <UiFact v-if="price" icon="price" :value="price" :emphasis="leadWithFacts" />
-        <UiFact v-if="when" icon="date" :value="when" :emphasis="leadWithFacts" />
+        <UiFact v-if="weight" icon="weight" :value="weight" />
+        <UiFact v-if="price" icon="price" :value="price" />
+        <UiFact v-if="when" icon="date" :value="when" />
       </div>
       <div v-if="paidAt || initiator" class="flex flex-wrap items-center gap-x-3 gap-y-1">
         <UiFact v-if="paidAt" icon="date" :value="paidAt" />
