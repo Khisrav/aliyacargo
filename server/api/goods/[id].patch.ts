@@ -1,5 +1,5 @@
 import { createError, getRouterParam, readBody } from 'h3'
-import { collectTrackCodes } from '#shared/utils/tracks'
+import { collectTrackCodes, tracksEnabled } from '#shared/utils/tracks'
 import { requireTelegramAuth } from '../../utils/auth'
 import { GOODS_SELECT, mapGoodRow, useSupabaseAdmin } from '../../utils/supabase'
 
@@ -52,41 +52,43 @@ export default defineEventHandler(async (event) => {
   if (hasPaidPatch) {
     const acceptedBy = user.username ?? user.first_name ?? String(user.id)
     if (body.has_paid) {
-      const parsed = collectTrackCodes(body.tracks ?? [])
-      if (!parsed.ok) {
-        throw createError({
-          statusCode: 400,
-          statusMessage: parsed.reason === 'long'
-            ? 'Трек-номер слишком длинный'
-            : 'Некорректный трек-номер',
-        })
-      }
+      if (tracksEnabled) {
+        const parsed = collectTrackCodes(body.tracks ?? [])
+        if (!parsed.ok) {
+          throw createError({
+            statusCode: 400,
+            statusMessage: parsed.reason === 'long'
+              ? 'Трек-номер слишком длинный'
+              : 'Некорректный трек-номер',
+          })
+        }
 
-      const { data: savedTracks, error: tracksError } = await supabase
-        .from('good_tracks')
-        .select('code')
-        .eq('good_id', id)
-
-      if (tracksError) {
-        throw createError({ statusCode: 500, statusMessage: tracksError.message })
-      }
-
-      const saved = new Set((savedTracks ?? []).map(track => String(track.code)))
-      const fresh = parsed.codes.filter(code => !saved.has(code))
-      if (saved.size + fresh.length < 1) {
-        throw createError({ statusCode: 400, statusMessage: 'Сначала отсканируйте трек-номер' })
-      }
-
-      if (fresh.length) {
-        const { error: insertError } = await supabase
+        const { data: savedTracks, error: tracksError } = await supabase
           .from('good_tracks')
-          .upsert(
-            fresh.map(code => ({ good_id: id, code })),
-            { onConflict: 'good_id,code', ignoreDuplicates: true },
-          )
+          .select('code')
+          .eq('good_id', id)
 
-        if (insertError) {
-          throw createError({ statusCode: 500, statusMessage: insertError.message })
+        if (tracksError) {
+          throw createError({ statusCode: 500, statusMessage: tracksError.message })
+        }
+
+        const saved = new Set((savedTracks ?? []).map(track => String(track.code)))
+        const fresh = parsed.codes.filter(code => !saved.has(code))
+        if (saved.size + fresh.length < 1) {
+          throw createError({ statusCode: 400, statusMessage: 'Сначала отсканируйте трек-номер' })
+        }
+
+        if (fresh.length) {
+          const { error: insertError } = await supabase
+            .from('good_tracks')
+            .upsert(
+              fresh.map(code => ({ good_id: id, code })),
+              { onConflict: 'good_id,code', ignoreDuplicates: true },
+            )
+
+          if (insertError) {
+            throw createError({ statusCode: 500, statusMessage: insertError.message })
+          }
         }
       }
 

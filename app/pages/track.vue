@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { formatPhone, isValidPhone, normalizePhone } from '#shared/utils/phone'
-import { normalizeTrackCode } from '#shared/utils/tracks'
+import { normalizeTrackCode, tracksEnabled } from '#shared/utils/tracks'
 
 definePageMeta({
   layout: 'guest',
@@ -182,7 +182,7 @@ const statItems = computed(() => {
 
     <main class="animate-fade-up space-y-4 px-4 pb-8">
       <section class="ui-card space-y-4 p-5">
-        <div class="ui-glass flex rounded-full p-1">
+        <div v-if="tracksEnabled" class="ui-glass flex rounded-full p-1">
           <button
             type="button"
             class="flex-1 rounded-full py-2 text-xs font-extrabold transition"

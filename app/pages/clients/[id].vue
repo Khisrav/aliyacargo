@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { Client, Good } from '#shared/types/domain'
 import { formatPhone, isValidPhone, normalizePhone } from '#shared/utils/phone'
+import { tracksEnabled } from '#shared/utils/tracks'
 
 interface ClientDetail {
   client: { id: number, name: string, phone: string, created_at: string, updated_at: string }
@@ -87,12 +88,26 @@ function openGood(item: Good) {
   navigateTo({ path: `/goods/${item.id}`, query: { from: route.fullPath } })
 }
 
-function requestPay(item: Good) {
+async function requestPay(item: Good) {
   if (item.has_paid) {
     void clearPaid(item)
     return
   }
-  openGood(item)
+  if (tracksEnabled) {
+    openGood(item)
+    return
+  }
+  try {
+    const updated = await apiFetch<Good>(`/api/goods/${item.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ has_paid: true }),
+    })
+    applyGood(updated)
+    haptic('light')
+  }
+  catch (e) {
+    showToast('error', e instanceof Error ? e.message : 'Не удалось обновить')
+  }
 }
 
 async function clearPaid(item: Good) {
@@ -224,7 +239,7 @@ async function saveEdit() {
           :has-paid="item.has_paid"
           :initiator="item.payment_accepted_by"
           :paid-at="item.paid_at ? formatDateTime(item.paid_at) : ''"
-          :track-count="item.tracks.length"
+          :track-count="tracksEnabled ? item.tracks.length : 0"
           :show-trash="false"
           @toggle-paid="requestPay(item)"
           @view-tracks="openGood(item)"

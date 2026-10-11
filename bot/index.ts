@@ -1,7 +1,7 @@
 import { Bot, InlineKeyboard } from 'grammy'
 import { createClient } from '@supabase/supabase-js'
 import { formatPhone, isValidPhone, normalizePhone } from '../shared/utils/phone'
-import { normalizeTrackCode } from '../shared/utils/tracks'
+import { normalizeTrackCode, tracksEnabled } from '../shared/utils/tracks'
 import { isAllowedNickname } from '../server/utils/telegram'
 
 const token = process.env.TELEGRAM_BOT_TOKEN
@@ -203,7 +203,9 @@ bot.command('start', async (ctx) => {
 
   await ctx.reply(
     'Добро пожаловать в Aliya Cargo!\n\n'
-    + '👷 Сотрудники — откройте приложение или отправьте трек-номер.\n'
+    + (tracksEnabled
+      ? '👷 Сотрудники — откройте приложение или отправьте трек-номер.\n'
+      : '👷 Сотрудники — откройте приложение для работы.\n')
     + '👤 Клиенты — нажмите «Мой груз» или отправьте номер телефона (9 цифр без +992).\n\n'
     + 'Пример: 901123456',
     { reply_markup: keyboard },
@@ -257,7 +259,7 @@ bot.on('message:text', async (ctx) => {
     return
   }
 
-  if (isWorker(ctx.from?.username)) {
+  if (tracksEnabled && isWorker(ctx.from?.username)) {
     await replyTrack(ctx, text)
     return
   }

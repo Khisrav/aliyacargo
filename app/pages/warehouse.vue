@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { Good } from '#shared/types/domain'
 import { formatPhone } from '#shared/utils/phone'
-import { normalizeTrackCode } from '#shared/utils/tracks'
+import { normalizeTrackCode, tracksEnabled } from '#shared/utils/tracks'
 
 const route = useRoute()
 const { initData, ready, haptic } = useTelegram()
@@ -104,12 +104,26 @@ async function searchTrack() {
   }
 }
 
-function requestPay(item: Good) {
+async function requestPay(item: Good) {
   if (item.has_paid) {
     void clearPaid(item)
     return
   }
-  openGood(item)
+  if (tracksEnabled) {
+    openGood(item)
+    return
+  }
+  try {
+    const updated = await apiFetch<Good>(`/api/goods/${item.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ has_paid: true }),
+    })
+    goods.value = goods.value.filter(g => g.id !== updated.id)
+    showToast('success', 'Отмечено оплаченным')
+  }
+  catch (e) {
+    showToast('error', e instanceof Error ? e.message : 'Не удалось обновить')
+  }
 }
 
 async function clearPaid(item: Good) {
@@ -152,7 +166,7 @@ async function clearPaid(item: Good) {
         </button>
       </div>
 
-      <label class="ui-field">
+      <label v-if="tracksEnabled" class="ui-field">
         <span class="ui-label">Трек-номер</span>
         <input
           v-model="trackQuery"
@@ -177,12 +191,12 @@ async function clearPaid(item: Good) {
         </button>
       </label>
 
-      <p v-if="trackMiss" class="ui-card px-5 py-6 text-center text-sm font-medium text-muted">
+      <p v-if="tracksEnabled && trackMiss" class="ui-card px-5 py-6 text-center text-sm font-medium text-muted">
         Трек {{ trackMiss }} не найден.
       </p>
 
       <button
-        v-else-if="trackHit"
+        v-else-if="tracksEnabled && trackHit"
         type="button"
         class="ui-card w-full overflow-hidden text-left"
         @click="openGood(trackHit)"
@@ -284,7 +298,7 @@ async function clearPaid(item: Good) {
           :has-paid="item.has_paid"
           :initiator="item.payment_accepted_by"
           :paid-at="item.paid_at ? formatDateTime(item.paid_at) : ''"
-          :track-count="item.tracks.length"
+          :track-count="tracksEnabled ? item.tracks.length : 0"
           :show-trash="false"
           @toggle-paid="requestPay(item)"
           @view-tracks="openGood(item)"

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { Acceptance, Good } from '#shared/types/domain'
 import { formatPhone, isValidPhone, normalizePhone } from '#shared/utils/phone'
+import { tracksEnabled } from '#shared/utils/tracks'
 
 const route = useRoute()
 const { initData, ready, haptic } = useTelegram()
@@ -193,12 +194,27 @@ function openGood(item: Good) {
   navigateTo({ path: `/goods/${item.id}`, query: { from: route.fullPath } })
 }
 
-function requestPay(item: Good) {
+async function requestPay(item: Good) {
   if (item.has_paid) {
     void clearPaid(item)
     return
   }
-  openGood(item)
+  if (tracksEnabled) {
+    openGood(item)
+    return
+  }
+  try {
+    const updated = await apiFetch<Good>(`/api/goods/${item.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ has_paid: true }),
+    })
+    const idx = goods.value.findIndex(g => g.id === item.id)
+    if (idx !== -1) goods.value[idx] = updated
+    haptic('light')
+  }
+  catch (e) {
+    showToast('error', e instanceof Error ? e.message : 'Не удалось обновить')
+  }
 }
 
 async function clearPaid(item: Good) {
@@ -482,7 +498,7 @@ async function closeAcceptance() {
             :has-paid="item.has_paid"
             :initiator="item.payment_accepted_by"
             :paid-at="item.paid_at ? formatDateTime(item.paid_at) : ''"
-            :track-count="item.tracks.length"
+            :track-count="tracksEnabled ? item.tracks.length : 0"
             :show-edit="acceptance.status === 'open'"
             :show-trash="acceptance.status === 'open'"
             @toggle-paid="requestPay(item)"

@@ -1,3 +1,6 @@
+/** Handover scanning. Flip to true when the warehouse starts requiring track codes. */
+export const tracksEnabled = false
+
 export const MAX_TRACK_CODE_LENGTH = 120
 
 /** Scanner text, with control characters (including Enter) removed. */
