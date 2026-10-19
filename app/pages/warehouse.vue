@@ -7,7 +7,7 @@ const route = useRoute()
 const { initData, ready, haptic } = useTelegram()
 const { apiFetch } = useApi(initData)
 const { requireWorker } = useWorkerGate()
-const { formatPrice, formatWeight, formatDateTime } = useFormatters()
+const { formatPrice, formatWeight, formatDateTime, formatDate } = useFormatters()
 
 const state = ref<'loading' | 'ok' | 'error'>('loading')
 const errorMessage = ref('')
@@ -15,6 +15,9 @@ const goods = ref<Good[]>([])
 const loadingGoods = ref(false)
 const toast = ref<{ type: 'success' | 'error', message: string } | null>(null)
 const paidFilter = ref<'unpaid' | 'paid'>('unpaid')
+const filtersOpen = ref(false)
+const paidFrom = ref('')
+const paidTo = ref('')
 const search = ref('')
 const trackQuery = ref('')
 const trackSearching = ref(false)
@@ -30,7 +33,20 @@ watch(ready, async () => {
   await load()
 }, { immediate: true })
 
-watch(paidFilter, () => {
+const paidRangeActive = computed(() => !!paidFrom.value || !!paidTo.value)
+
+const paidRangeLabel = computed(() => {
+  if (!paidRangeActive.value) return ''
+  const from = paidFrom.value ? formatDate(paidFrom.value) : '…'
+  const to = paidTo.value ? formatDate(paidTo.value) : '…'
+  return `${from} — ${to}`
+})
+
+watch([paidFilter, paidFrom, paidTo], () => {
+  if (paidRangeActive.value && paidFilter.value !== 'paid') {
+    paidFilter.value = 'paid'
+    return
+  }
   if (state.value === 'ok' || state.value === 'error') load()
 })
 
@@ -45,8 +61,15 @@ async function load() {
   loadingGoods.value = true
   state.value = state.value === 'ok' ? 'ok' : 'loading'
   try {
+    if (paidFrom.value && paidTo.value && paidFrom.value > paidTo.value) {
+      state.value = 'error'
+      errorMessage.value = 'Дата «с» позже даты «по»'
+      return
+    }
     const params = new URLSearchParams({ paid: paidFilter.value })
     if (search.value.trim()) params.set('search', search.value.trim())
+    if (paidFilter.value === 'paid' && paidFrom.value) params.set('paidFrom', paidFrom.value)
+    if (paidFilter.value === 'paid' && paidTo.value) params.set('paidTo', paidTo.value)
     goods.value = await apiFetch<Good[]>(`/api/goods?${params}`)
     state.value = 'ok'
   }
@@ -68,6 +91,19 @@ const totals = computed(() => {
     price: Math.round(price * 100) / 100,
   }
 })
+
+function setPaidFilter(next: 'unpaid' | 'paid') {
+  if (next === 'unpaid') {
+    paidFrom.value = ''
+    paidTo.value = ''
+  }
+  paidFilter.value = next
+}
+
+function clearPaidRange() {
+  paidFrom.value = ''
+  paidTo.value = ''
+}
 
 function showToast(type: 'success' | 'error', message: string) {
   toast.value = { type, message }
@@ -144,7 +180,21 @@ async function clearPaid(item: Good) {
 
 <template>
   <div>
-    <PageHeader title="Склад" subtitle="Товары на складе" show-refresh :refreshing="loadingGoods" @refresh="load" />
+    <PageHeader title="Склад" subtitle="Товары на складе" show-refresh :refreshing="loadingGoods" @refresh="load">
+      <template #actions>
+        <button
+          type="button"
+          class="ui-icon-btn"
+          :class="paidRangeActive ? 'border-brand/25 bg-gradient-to-br from-teal-400 to-brand text-white shadow-[0_8px_20px_rgba(13,148,136,0.3)]' : ''"
+          aria-label="Фильтр по дате оплаты"
+          @click="filtersOpen = true"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 5h16l-6 7v5l-4 2v-7L4 5z" />
+          </svg>
+        </button>
+      </template>
+    </PageHeader>
 
     <div class="space-y-4 px-4 pb-8">
       <div class="ui-glass flex rounded-full p-1">
@@ -152,7 +202,7 @@ async function clearPaid(item: Good) {
           type="button"
           class="flex-1 rounded-full py-2.5 text-xs font-extrabold transition"
           :class="paidFilter === 'unpaid' ? 'bg-brand text-white shadow' : 'text-muted'"
-          @click="paidFilter = 'unpaid'"
+          @click="setPaidFilter('unpaid')"
         >
           Долг
         </button>
@@ -160,7 +210,7 @@ async function clearPaid(item: Good) {
           type="button"
           class="flex-1 rounded-full py-2.5 text-xs font-extrabold transition"
           :class="paidFilter === 'paid' ? 'bg-brand text-white shadow' : 'text-muted'"
-          @click="paidFilter = 'paid'"
+          @click="setPaidFilter('paid')"
         >
           Оплачено
         </button>
@@ -259,6 +309,10 @@ async function clearPaid(item: Good) {
         </div>
       </button>
 
+      <p v-if="paidRangeActive" class="px-1 text-xs font-bold text-brand">
+        Оплачено {{ paidRangeLabel }}
+      </p>
+
       <label class="ui-field">
         <span class="ui-label">Поиск</span>
         <input v-model="search" type="text" class="ui-input" placeholder="Имя или телефон" autocomplete="off">
@@ -283,7 +337,7 @@ async function clearPaid(item: Good) {
       <UiError v-else-if="state === 'error'" :message="errorMessage" @retry="load" />
       <UiEmpty
         v-else-if="!goods.length"
-        :title="paidFilter === 'unpaid' ? 'Нет неоплаченных' : 'Нет оплаченных'"
+        :title="paidRangeActive ? 'Нет оплат за этот период' : paidFilter === 'unpaid' ? 'Нет неоплаченных' : 'Нет оплаченных'"
         description="Товары появятся после сортировки"
       />
       <ul v-else class="space-y-2">
@@ -305,6 +359,33 @@ async function clearPaid(item: Good) {
         />
       </ul>
     </div>
+
+    <UiSheet v-model="filtersOpen">
+      <div class="space-y-4 pt-1">
+        <h2 class="text-xl font-extrabold text-ink">Дата оплаты</h2>
+        <div class="grid grid-cols-2 gap-3">
+          <label class="ui-field">
+            <span class="ui-label">С</span>
+            <input v-model="paidFrom" type="date" class="ui-input">
+          </label>
+          <label class="ui-field">
+            <span class="ui-label">По</span>
+            <input v-model="paidTo" type="date" class="ui-input">
+          </label>
+        </div>
+        <p class="text-xs font-medium text-muted">
+          Товары, оплаченные в эти дни. Пустая граница не ограничивает период.
+        </p>
+        <button
+          v-if="paidRangeActive"
+          type="button"
+          class="ui-btn-ghost w-full"
+          @click="clearPaidRange"
+        >
+          Сбросить
+        </button>
+      </div>
+    </UiSheet>
 
     <UiToast :toast="toast" />
   </div>

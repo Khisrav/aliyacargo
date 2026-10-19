@@ -1,5 +1,6 @@
 import { createError, getQuery } from 'h3'
 import { requireTelegramAuth } from '../../utils/auth'
+import { addDateKeyDays, businessDayStart, parseDateParam } from '../../utils/period'
 import { GOODS_SELECT, mapGoodRow, useSupabaseAdmin } from '../../utils/supabase'
 
 export default defineEventHandler(async (event) => {
@@ -10,17 +11,28 @@ export default defineEventHandler(async (event) => {
   const search = typeof query.search === 'string' ? query.search.trim() : ''
   const acceptanceId = query.acceptance_id != null ? Number(query.acceptance_id) : null
   const clientId = query.client_id != null ? Number(query.client_id) : null
+  const paidFrom = parseDateParam(query.paidFrom, 'paidFrom')
+  const paidTo = parseDateParam(query.paidTo, 'paidTo')
+
+  if (paidFrom && paidTo && paidFrom > paidTo) {
+    throw createError({ statusCode: 400, statusMessage: 'Дата «с» позже даты «по»' })
+  }
 
   const supabase = useSupabaseAdmin()
   let builder = supabase
     .from('goods')
     .select(GOODS_SELECT)
     .is('deleted_at', null)
-    .order('created_at', { ascending: false })
     .limit(1000)
+
+  if (paidFrom || paidTo) builder = builder.order('paid_at', { ascending: false })
+  else builder = builder.order('created_at', { ascending: false })
 
   if (paid === 'paid') builder = builder.eq('has_paid', true)
   else if (paid === 'unpaid') builder = builder.eq('has_paid', false)
+
+  if (paidFrom) builder = builder.gte('paid_at', businessDayStart(paidFrom).toISOString())
+  if (paidTo) builder = builder.lt('paid_at', businessDayStart(addDateKeyDays(paidTo, 1)).toISOString())
 
   if (Number.isFinite(acceptanceId) && acceptanceId! > 0) {
     builder = builder.eq('acceptance_id', acceptanceId)
