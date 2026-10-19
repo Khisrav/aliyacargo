@@ -38,6 +38,20 @@ export default defineEventHandler(async (event) => {
 
   const supabase = useSupabaseAdmin()
 
+  const { data: current, error: currentError } = await supabase
+    .from('clients')
+    .select('id, name')
+    .eq('id', id)
+    .is('deleted_at', null)
+    .maybeSingle()
+
+  if (currentError) {
+    throw createError({ statusCode: 500, statusMessage: currentError.message })
+  }
+  if (!current) {
+    throw createError({ statusCode: 404, statusMessage: 'Клиент не найден' })
+  }
+
   if (patch.phone) {
     const { data: taken, error: takenError } = await supabase
       .from('clients')
@@ -71,6 +85,20 @@ export default defineEventHandler(async (event) => {
   }
   if (!data) {
     throw createError({ statusCode: 404, statusMessage: 'Клиент не найден' })
+  }
+
+  // Packages created from the client name keep that snapshot. A typo fix should
+  // follow them; a name that was edited on purpose stays as written.
+  if (patch.name && patch.name !== current.name) {
+    const { error: goodsError } = await supabase
+      .from('goods')
+      .update({ name: patch.name, updated_at: patch.updated_at })
+      .eq('client_id', id)
+      .eq('name', current.name)
+
+    if (goodsError) {
+      throw createError({ statusCode: 500, statusMessage: goodsError.message })
+    }
   }
 
   const client: Client = {

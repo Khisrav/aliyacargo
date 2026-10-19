@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Acceptance, Good } from '#shared/types/domain'
+import type { Acceptance, Client, Good } from '#shared/types/domain'
 import { formatPhone, isValidPhone, normalizePhone } from '#shared/utils/phone'
 import { tracksEnabled } from '#shared/utils/tracks'
 
@@ -29,8 +29,15 @@ const closing = ref(false)
 const editOpen = ref(false)
 const editing = ref<Good | null>(null)
 const editName = ref('')
+const editPhone = ref('')
 const editWeight = ref('')
 const editSaving = ref(false)
+const goodsSort = ref<'name' | 'newest' | 'oldest'>('name')
+const goodsSortOptions = [
+  { value: 'name' as const, label: 'Имя' },
+  { value: 'newest' as const, label: 'Новые' },
+  { value: 'oldest' as const, label: 'Старые' },
+]
 
 const phoneField = ref<{ focus: () => void } | null>(null)
 const nameRef = ref<HTMLInputElement>()
@@ -52,6 +59,24 @@ const canSubmit = computed(() =>
   && weightNum.value > 0
   && !submitting.value,
 )
+
+const sortedGoods = computed(() => {
+  const list = goods.value.slice()
+  if (goodsSort.value === 'newest') {
+    list.sort((a, b) => b.created_at.localeCompare(a.created_at) || b.id - a.id)
+    return list
+  }
+  if (goodsSort.value === 'oldest') {
+    list.sort((a, b) => a.created_at.localeCompare(b.created_at) || a.id - b.id)
+    return list
+  }
+  list.sort((a, b) => {
+    const byName = (a.client_name || a.name).localeCompare(b.client_name || b.name, 'ru', { sensitivity: 'base' })
+    if (byName !== 0) return byName
+    return a.created_at.localeCompare(b.created_at) || a.id - b.id
+  })
+  return list
+})
 
 watch(ready, async () => {
   if (!ready.value) return
@@ -258,11 +283,15 @@ async function removeGood(item: Good) {
 }
 
 function openEdit(item: Good) {
-  if (acceptance.value?.status !== 'open') return
   editing.value = item
-  editName.value = item.name || item.client_name
+  editName.value = item.client_name || item.name
+  editPhone.value = formatPhone(item.phone)
   editWeight.value = String(item.weight)
   editOpen.value = true
+}
+
+function onEditPhoneInput(e: Event) {
+  editPhone.value = formatPhone(normalizePhone((e.target as HTMLInputElement).value))
 }
 
 const editWeightNum = computed(() => parseFloat(editWeight.value.replace(',', '.')) || 0)
@@ -270,34 +299,59 @@ const editPrice = computed(() => Math.round(editWeightNum.value * pricePerKg.val
 const canSaveEdit = computed(() =>
   !!editing.value
   && editName.value.trim().length > 0
-  && editWeightNum.value > 0
+  && isValidPhone(editPhone.value)
+  && (acceptance.value?.status !== 'open' || editWeightNum.value > 0)
   && !editSaving.value,
 )
 
 async function saveEdit() {
   if (!canSaveEdit.value || !editing.value || !acceptance.value) return
   editSaving.value = true
+  const item = editing.value
+  const nextName = editName.value.trim()
+  const nextPhone = normalizePhone(editPhone.value)
+  const previousName = item.client_name || item.name
+  const clientChanged = nextName !== previousName || nextPhone !== normalizePhone(item.phone)
+  const weightChanged = acceptance.value.status === 'open'
+    && Math.abs(editWeightNum.value - item.weight) > 0.0001
+
   try {
-    const updated = await apiFetch<Good>(`/api/goods/${editing.value.id}`, {
-      method: 'PATCH',
-      body: JSON.stringify({
-        name: editName.value.trim(),
-        weight: editWeightNum.value,
-      }),
-    })
-    const idx = goods.value.findIndex(g => g.id === updated.id)
-    const prev = idx !== -1 ? goods.value[idx] : null
-    if (idx !== -1) goods.value[idx] = updated
-    if (prev) {
-      const delta = updated.weight - prev.weight
-      acceptance.value = {
-        ...acceptance.value,
-        sorted_weight: Math.round(((acceptance.value.sorted_weight ?? 0) + delta) * 1000) / 1000,
+    if (clientChanged) {
+      const updatedClient = await apiFetch<Client>(`/api/clients/${item.client_id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ name: nextName, phone: nextPhone }),
+      })
+      goods.value = goods.value.map((good) => {
+        if (good.client_id !== item.client_id) return good
+        const sameName = good.name === item.client_name || good.name === previousName
+        return {
+          ...good,
+          client_name: updatedClient.name,
+          phone: updatedClient.phone,
+          name: sameName ? updatedClient.name : good.name,
+        }
+      })
+    }
+
+    if (weightChanged) {
+      const updated = await apiFetch<Good>(`/api/goods/${item.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ weight: editWeightNum.value }),
+      })
+      const idx = goods.value.findIndex(g => g.id === updated.id)
+      const prev = idx !== -1 ? goods.value[idx] : null
+      if (idx !== -1) goods.value[idx] = updated
+      if (prev && weightChanged) {
+        acceptance.value = {
+          ...acceptance.value,
+          sorted_weight: Math.round(((acceptance.value.sorted_weight ?? 0) + (updated.weight - prev.weight)) * 1000) / 1000,
+        }
       }
     }
+
     editOpen.value = false
     editing.value = null
-    showToast('success', 'Сохранено')
+    showToast('success', clientChanged ? 'Клиент обновлён' : 'Сохранено')
   }
   catch (e) {
     showToast('error', e instanceof Error ? e.message : 'Не удалось сохранить')
@@ -485,10 +539,22 @@ async function closeAcceptance() {
           Товары
           <span class="font-medium text-muted">{{ goods.length }}</span>
         </h2>
+        <div v-if="goods.length" class="ui-glass flex rounded-full p-1">
+          <button
+            v-for="opt in goodsSortOptions"
+            :key="opt.value"
+            type="button"
+            class="flex-1 rounded-full py-2 text-xs font-extrabold transition"
+            :class="goodsSort === opt.value ? 'bg-brand text-white shadow' : 'text-muted'"
+            @click="goodsSort = opt.value"
+          >
+            {{ opt.label }}
+          </button>
+        </div>
         <UiEmpty v-if="!goods.length" title="Пока пусто" description="Взвесьте первый товар клиента" />
         <ul v-else class="space-y-2">
           <GoodsRow
-            v-for="item in goods"
+            v-for="item in sortedGoods"
             :key="item.id"
             :name="item.client_name || item.name"
             :phone="item.phone"
@@ -499,7 +565,7 @@ async function closeAcceptance() {
             :initiator="item.payment_accepted_by"
             :paid-at="item.paid_at ? formatDateTime(item.paid_at) : ''"
             :track-count="tracksEnabled ? item.tracks.length : 0"
-            :show-edit="acceptance.status === 'open'"
+            :show-edit="true"
             :show-trash="acceptance.status === 'open'"
             @toggle-paid="requestPay(item)"
             @view-tracks="openGood(item)"
@@ -514,22 +580,34 @@ async function closeAcceptance() {
       <div class="space-y-4 pt-1">
         <h2 class="text-xl font-extrabold text-ink">Изменить товар</h2>
         <label class="ui-field">
-          <span class="ui-label">Название / имя</span>
+          <span class="ui-label">Имя клиента</span>
           <input v-model="editName" type="text" class="ui-input" autocomplete="off">
         </label>
-        <label class="ui-field">
-          <span class="ui-label">Вес (кг)</span>
-          <input
-            v-model="editWeight"
-            type="text"
-            inputmode="decimal"
-            class="ui-input text-center text-2xl font-extrabold tabular-nums"
-          >
-        </label>
-        <div class="flex justify-between rounded-[1.25rem] bg-brand-soft/70 px-4 py-3 text-sm">
-          <span class="font-bold text-brand-dark/70">Цена</span>
-          <span class="font-extrabold tabular-nums text-brand-dark">{{ formatPrice(editPrice) }}</span>
-        </div>
+        <UiPhoneField
+          :model-value="editPhone"
+          label="Телефон"
+          hint="без +992"
+          @input="onEditPhoneInput"
+          @enter="saveEdit"
+        />
+        <p class="text-xs font-medium text-muted">
+          Имя и телефон сохраняются у клиента и обновятся на всех его товарах.
+        </p>
+        <template v-if="acceptance?.status === 'open'">
+          <label class="ui-field">
+            <span class="ui-label">Вес (кг)</span>
+            <input
+              v-model="editWeight"
+              type="text"
+              inputmode="decimal"
+              class="ui-input text-center text-2xl font-extrabold tabular-nums"
+            >
+          </label>
+          <div class="flex justify-between rounded-[1.25rem] bg-brand-soft/70 px-4 py-3 text-sm">
+            <span class="font-bold text-brand-dark/70">Цена</span>
+            <span class="font-extrabold tabular-nums text-brand-dark">{{ formatPrice(editPrice) }}</span>
+          </div>
+        </template>
         <button type="button" class="ui-btn-primary w-full" :disabled="!canSaveEdit" @click="saveEdit">
           {{ editSaving ? 'Сохранение…' : 'Сохранить' }}
         </button>
