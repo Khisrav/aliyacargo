@@ -52,6 +52,63 @@ const remaining = computed(() => {
   if (!acceptance.value) return 0
   return Math.max(0, acceptance.value.total_weight - (acceptance.value.sorted_weight ?? 0))
 })
+/** Batch money, from the same goods the list shows, so both always agree. */
+const money = computed(() => {
+  const cost = acceptance.value?.paid_tjs ?? 0
+  let total = 0
+  let paid = 0
+  let paidCount = 0
+  for (const g of goods.value) {
+    total += g.price
+    if (g.has_paid) {
+      paid += g.price
+      paidCount += 1
+    }
+  }
+  const round = (n: number) => Math.round(n * 100) / 100
+  return {
+    total: round(total),
+    paid: round(paid),
+    debt: round(total - paid),
+    paidCount,
+    debtCount: goods.value.length - paidCount,
+    rate: total ? Math.round((paid / total) * 1000) / 10 : 0,
+    profitNow: round(paid - cost),
+    profitFull: round(total - cost),
+    breakEven: total ? Math.round((cost / total) * 1000) / 10 : 0,
+  }
+})
+
+const debtors = computed(() => {
+  const map = new Map<number, { id: number, name: string, phone: string, count: number, amount: number }>()
+  for (const g of goods.value) {
+    if (g.has_paid) continue
+    const cur = map.get(g.client_id) ?? { id: g.client_id, name: g.client_name || g.name, phone: g.phone, count: 0, amount: 0 }
+    cur.count += 1
+    cur.amount += g.price
+    map.set(g.client_id, cur)
+  }
+  return [...map.values()].sort((a, b) => b.amount - a.amount)
+})
+const debtorsOpen = ref(false)
+
+const wasteRate = computed(() => {
+  if (!acceptance.value?.total_weight) return 0
+  return Math.round(((acceptance.value.waste_weight ?? 0) / acceptance.value.total_weight) * 1000) / 10
+})
+
+function rateTextClass(rate: number) {
+  if (rate >= 100) return 'text-success'
+  if (rate >= 50) return 'text-ink'
+  return 'text-danger'
+}
+
+function barClass(rate: number) {
+  if (rate >= 100) return 'bg-gradient-to-r from-emerald-300 to-success'
+  if (rate >= 50) return 'bg-gradient-to-r from-teal-300 to-brand'
+  return 'bg-gradient-to-r from-amber-300 to-accent'
+}
+
 const canSubmit = computed(() =>
   acceptance.value?.status === 'open'
   && isValidPhone(phoneDigits.value)
@@ -399,6 +456,7 @@ async function closeAcceptance() {
   <div>
     <PageHeader
       :title="acceptance ? formatDate(acceptance.accepted_at) : 'Приёмка'"
+      :subtitle="acceptance ? (acceptance.status === 'open' ? 'Открыта · сортировка' : 'Закрыта') : ''"
       back-to="/acceptances"
       :show-refresh="acceptance?.status === 'closed'"
       :refreshing="state === 'loading'"
@@ -448,38 +506,25 @@ async function closeAcceptance() {
 
     <main v-else-if="acceptance" class="space-y-4 px-4 pb-8">
       <div class="ui-card space-y-2 px-4 py-4 text-sm">
-        <div class="flex items-center justify-between">
-          <span class="text-muted">Статус</span>
-          <span
-            class="rounded-full px-3 py-1 text-[11px] font-extrabold"
-            :class="acceptance.status === 'open' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'"
-          >
-            {{ acceptance.status === 'open' ? 'Открыта · сортировка' : 'Закрыта' }}
-          </span>
-        </div>
         <div class="flex justify-between">
           <span class="text-muted">Принято</span>
           <span class="font-extrabold tabular-nums">{{ formatWeight(acceptance.total_weight) }}</span>
         </div>
         <div class="flex justify-between">
-          <span class="text-muted">Отсортировано</span>
+          <span class="text-muted">Отсортировано · {{ goods.length }} тов.</span>
           <span class="font-extrabold tabular-nums">{{ formatWeight(acceptance.sorted_weight ?? 0) }}</span>
         </div>
         <div v-if="acceptance.status === 'open'" class="flex justify-between">
-          <span class="text-muted">Осталось</span>
+          <span class="text-muted">Осталось отсортировать</span>
           <span class="font-extrabold tabular-nums text-brand">{{ formatWeight(remaining) }}</span>
         </div>
         <div v-else class="flex justify-between">
-          <span class="text-muted">Мусор</span>
+          <span class="text-muted">Мусор · {{ wasteRate }}%</span>
           <span class="font-extrabold tabular-nums text-danger">{{ formatWeight(acceptance.waste_weight ?? 0) }}</span>
         </div>
-        <div class="flex justify-between">
-          <span class="text-muted">Посреднику</span>
+        <div class="flex justify-between border-t border-white/60 pt-2">
+          <span class="text-muted">Закупка · {{ formatPrice(acceptance.cost_per_kg, 2) }}/кг</span>
           <span class="font-extrabold tabular-nums">{{ formatPrice(acceptance.paid_tjs) }}</span>
-        </div>
-        <div class="flex justify-between">
-          <span class="text-muted">Себест. / кг</span>
-          <span class="font-extrabold tabular-nums">{{ formatPrice(acceptance.cost_per_kg) }}</span>
         </div>
       </div>
 
@@ -532,6 +577,70 @@ async function closeAcceptance() {
         <button type="button" class="ui-btn-primary w-full" :disabled="!canSubmit" @click="submit">
           {{ submitting ? 'Сохранение…' : 'Добавить товар' }}
         </button>
+      </section>
+
+      <section v-if="goods.length" class="ui-card space-y-3 px-4 py-4">
+        <div class="flex items-baseline justify-between">
+          <h2 class="text-sm font-extrabold text-ink">Деньги</h2>
+          <span class="text-lg font-extrabold tabular-nums" :class="rateTextClass(money.rate)">{{ money.rate }}%</span>
+        </div>
+        <div class="h-2 w-full overflow-hidden rounded-full bg-white/60">
+          <div
+            class="h-full rounded-full transition-[width] duration-500"
+            :class="barClass(money.rate)"
+            :style="{ width: `${Math.min(100, money.rate)}%` }"
+          />
+        </div>
+        <div class="space-y-2 text-sm">
+          <div class="flex justify-between">
+            <span class="text-muted">Оплачено · {{ money.paidCount }} тов.</span>
+            <span class="font-extrabold tabular-nums text-success">{{ formatPrice(money.paid) }} из {{ formatPrice(money.total) }}</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-muted">Долг · {{ money.debtCount }} тов.</span>
+            <span class="font-extrabold tabular-nums text-danger">{{ formatPrice(money.debt) }}</span>
+          </div>
+          <div class="flex justify-between border-t border-white/60 pt-2">
+            <span class="text-muted">Прибыль сейчас</span>
+            <span class="font-extrabold tabular-nums" :class="money.profitNow >= 0 ? 'text-success' : 'text-danger'">
+              {{ formatPrice(money.profitNow) }}
+            </span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-muted">Прибыль при полной оплате</span>
+            <span class="font-extrabold tabular-nums" :class="money.profitFull >= 0 ? 'text-success' : 'text-danger'">
+              {{ formatPrice(money.profitFull) }}
+            </span>
+          </div>
+          <p v-if="money.profitNow < 0 && money.breakEven > 0" class="text-[11px] font-medium text-muted">
+            Закупка окупится, когда оплатят {{ money.breakEven }}% партии.
+          </p>
+        </div>
+      </section>
+
+      <section v-if="debtors.length" class="space-y-2">
+        <button
+          type="button"
+          class="flex w-full items-center justify-between px-1 text-sm font-extrabold text-ink"
+          @click="debtorsOpen = !debtorsOpen"
+        >
+          <span>Должники <span class="font-medium text-muted">{{ debtors.length }}</span></span>
+          <span class="text-xs font-bold text-brand">{{ debtorsOpen ? 'Скрыть' : 'Показать' }}</span>
+        </button>
+        <template v-if="debtorsOpen">
+          <NuxtLink
+            v-for="c in debtors"
+            :key="c.id"
+            :to="`/clients/${c.id}`"
+            class="ui-card flex items-center justify-between gap-3 px-4 py-3"
+          >
+            <div class="min-w-0">
+              <p class="truncate font-extrabold text-ink">{{ c.name }}</p>
+              <p class="text-xs text-muted">+992 {{ formatPhone(c.phone) }} · {{ c.count }} тов.</p>
+            </div>
+            <p class="shrink-0 font-extrabold tabular-nums text-danger">{{ formatPrice(c.amount) }}</p>
+          </NuxtLink>
+        </template>
       </section>
 
       <section class="space-y-2.5">
