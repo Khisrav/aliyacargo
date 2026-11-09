@@ -26,7 +26,7 @@ const primary = [
 
 const moreLinks = [
   { to: '/reports', label: 'Отчёты', desc: 'Итоги дня · закрытие в 00:00', icon: 'report' },
-  { to: '/stats', label: 'Статистика', desc: 'Остатки, финансы, графики', icon: 'warehouse' },
+  { to: '/stats', label: 'Статистика', desc: 'Долг, деньги за период', icon: 'warehouse' },
   { to: '/finance', label: 'Финансы', desc: 'Доходы и расходы', icon: 'ledger' },
   { to: '/trash', label: 'Корзина', desc: 'Восстановление · 14 дней', icon: 'trash' },
 ] as const

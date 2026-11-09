@@ -1,5 +1,7 @@
 import { createError, getQuery, readBody } from 'h3'
 import { requireTelegramAuth } from '../../utils/auth'
+import { businessDateKey } from '../../utils/reports'
+import { fetchAllPages } from '../../utils/pagination'
 import { mapAcceptanceRow, useSupabaseAdmin } from '../../utils/supabase'
 
 async function attachGoodsStats(acceptances: Array<Record<string, any>>) {
@@ -7,18 +9,18 @@ async function attachGoodsStats(acceptances: Array<Record<string, any>>) {
   const supabase = useSupabaseAdmin()
   const ids = acceptances.map(a => a.id)
 
-  const { data: goods, error } = await supabase
-    .from('goods')
-    .select('acceptance_id, weight')
-    .in('acceptance_id', ids)
-    .is('deleted_at', null)
-
-  if (error) {
-    throw createError({ statusCode: 500, statusMessage: error.message })
-  }
+  const goods = await fetchAllPages((from, to) =>
+    supabase
+      .from('goods')
+      .select('id, acceptance_id, weight')
+      .in('acceptance_id', ids)
+      .is('deleted_at', null)
+      .order('id', { ascending: true })
+      .range(from, to),
+  )
 
   const byId = new Map<number, { weight: number, count: number }>()
-  for (const g of goods ?? []) {
+  for (const g of goods) {
     const id = Number(g.acceptance_id)
     const cur = byId.get(id) ?? { weight: 0, count: 0 }
     cur.weight += Number(g.weight)
@@ -75,7 +77,7 @@ export default defineEventHandler(async (event) => {
     const paidTjs = Number(body.paid_tjs)
     const acceptedAt = typeof body.accepted_at === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(body.accepted_at)
       ? body.accepted_at
-      : new Date().toISOString().slice(0, 10)
+      : businessDateKey()
 
     if (!Number.isFinite(totalWeight) || totalWeight <= 0) {
       throw createError({ statusCode: 400, statusMessage: 'Общий вес должен быть больше 0' })

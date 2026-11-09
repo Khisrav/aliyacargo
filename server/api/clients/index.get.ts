@@ -1,39 +1,11 @@
-import { createError, getQuery } from 'h3'
+import { getQuery } from 'h3'
 import { requireTelegramAuth } from '../../utils/auth'
+import { fetchAllPages } from '../../utils/pagination'
 import { useSupabaseAdmin } from '../../utils/supabase'
 import type { ClientListItem } from '#shared/types/domain'
 import { normalizePhone } from '#shared/utils/phone'
 
-const PAGE_SIZE = 1000
-const MAX_PAGES = 100
 const CLIENT_ID_BATCH = 150
-
-type PageResult<T> = PromiseLike<{ data: T[] | null, error: { message: string } | null }>
-
-async function fetchAllPages<T extends { id?: number | string }>(load: (from: number, to: number) => PageResult<T>) {
-  const rows: T[] = []
-  let previousFirstId: number | null = null
-
-  for (let page = 0; page < MAX_PAGES; page++) {
-    const from = page * PAGE_SIZE
-    const { data, error } = await load(from, from + PAGE_SIZE - 1)
-    if (error) {
-      throw createError({ statusCode: 500, statusMessage: error.message })
-    }
-
-    const batch = data ?? []
-    if (!batch.length) break
-
-    const firstId = Number(batch[0]?.id)
-    if (previousFirstId != null && firstId === previousFirstId) break
-    if (Number.isFinite(firstId)) previousFirstId = firstId
-
-    rows.push(...batch)
-    if (batch.length < PAGE_SIZE) break
-  }
-
-  return rows
-}
 
 async function fetchGoodsForClients(
   supabase: ReturnType<typeof useSupabaseAdmin>,

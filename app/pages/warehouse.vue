@@ -12,6 +12,8 @@ const { formatPrice, formatWeight, formatDateTime, formatDate } = useFormatters(
 const state = ref<'loading' | 'ok' | 'error'>('loading')
 const errorMessage = ref('')
 const goods = ref<Good[]>([])
+const totals = ref({ count: 0, weight: 0, price: 0 })
+const truncated = ref(false)
 const loadingGoods = ref(false)
 const toast = ref<{ type: 'success' | 'error', message: string } | null>(null)
 const paidFilter = ref<'unpaid' | 'paid'>('unpaid')
@@ -70,7 +72,14 @@ async function load() {
     if (search.value.trim()) params.set('search', search.value.trim())
     if (paidFilter.value === 'paid' && paidFrom.value) params.set('paidFrom', paidFrom.value)
     if (paidFilter.value === 'paid' && paidTo.value) params.set('paidTo', paidTo.value)
-    goods.value = await apiFetch<Good[]>(`/api/goods?${params}`)
+    const res = await apiFetch<{
+      items: Good[]
+      totals: { count: number, weight: number, price: number }
+      truncated: boolean
+    }>(`/api/goods?${params}`)
+    goods.value = res.items
+    totals.value = res.totals
+    truncated.value = res.truncated
     state.value = 'ok'
   }
   catch (e) {
@@ -82,15 +91,16 @@ async function load() {
   }
 }
 
-const totals = computed(() => {
-  const weight = goods.value.reduce((s, g) => s + g.weight, 0)
-  const price = goods.value.reduce((s, g) => s + g.price, 0)
-  return {
-    count: goods.value.length,
-    weight: Math.round(weight * 1000) / 1000,
-    price: Math.round(price * 100) / 100,
+/** The good left this tab (paid or unpaid), so it no longer counts in the totals. */
+function dropFromList(item: Good) {
+  if (!goods.value.some(g => g.id === item.id)) return
+  goods.value = goods.value.filter(g => g.id !== item.id)
+  totals.value = {
+    count: Math.max(0, totals.value.count - 1),
+    weight: Math.max(0, Math.round((totals.value.weight - item.weight) * 1000) / 1000),
+    price: Math.max(0, Math.round((totals.value.price - item.price) * 100) / 100),
   }
-})
+}
 
 function setPaidFilter(next: 'unpaid' | 'paid') {
   if (next === 'unpaid') {
@@ -154,7 +164,7 @@ async function requestPay(item: Good) {
       method: 'PATCH',
       body: JSON.stringify({ has_paid: true }),
     })
-    goods.value = goods.value.filter(g => g.id !== updated.id)
+    dropFromList(updated)
     showToast('success', 'Отмечено оплаченным')
   }
   catch (e) {
@@ -168,7 +178,7 @@ async function clearPaid(item: Good) {
       method: 'PATCH',
       body: JSON.stringify({ has_paid: false }),
     })
-    goods.value = goods.value.filter(g => g.id !== updated.id)
+    dropFromList(updated)
     showToast('success', 'Снята оплата')
   }
   catch (e) {
@@ -358,6 +368,9 @@ async function clearPaid(item: Good) {
           @view-tracks="openGood(item)"
         />
       </ul>
+      <p v-if="state === 'ok' && truncated" class="px-1 text-center text-[11px] font-medium text-muted">
+        Показаны последние {{ goods.length }} из {{ totals.count }} · сумма выше — по всем
+      </p>
     </div>
 
     <UiSheet v-model="filtersOpen">

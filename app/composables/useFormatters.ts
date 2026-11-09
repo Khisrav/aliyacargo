@@ -1,9 +1,11 @@
 export function useFormatters(locale = 'ru-RU') {
-  function formatPrice(n: number) {
+  /** Whole somoni by default; pass digits for per-kg rates. */
+  function formatPrice(n: number, digits = 0) {
     return new Intl.NumberFormat(locale, {
       style: 'currency',
       currency: 'TJS',
-      maximumFractionDigits: 0,
+      minimumFractionDigits: 0,
+      maximumFractionDigits: digits,
     }).format(n)
   }
 

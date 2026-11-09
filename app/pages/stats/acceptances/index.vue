@@ -16,16 +16,16 @@ const filter = ref<Filter>('all')
 const FILTERS: { value: Filter, label: string }[] = [
   { value: 'all', label: 'Все' },
   { value: 'debt', label: 'С долгом' },
-  { value: 'done', label: 'Выкуплены' },
+  { value: 'done', label: 'Оплачены' },
 ]
 
-function isRedeemed(a: AcceptanceStats) {
-  return a.realized > 0
+function isFullyPaid(a: AcceptanceStats) {
+  return a.goods_count > 0 && a.unpaid_revenue === 0
 }
 
 const visible = computed(() => {
   if (filter.value === 'debt') return items.value.filter(a => a.unpaid_revenue > 0)
-  if (filter.value === 'done') return items.value.filter(isRedeemed)
+  if (filter.value === 'done') return items.value.filter(isFullyPaid)
   return items.value
 })
 
@@ -77,8 +77,8 @@ function rateTextClass(rate: number) {
 <template>
   <div>
     <PageHeader
-      title="Готовность приёмок"
-      subtitle="Сколько выкуплено по каждой партии"
+      title="Приёмки по оплате"
+      subtitle="Сколько оплачено по каждой партии"
       back-to="/stats"
       show-refresh
       :refreshing="state === 'loading'"
@@ -107,11 +107,11 @@ function rateTextClass(rate: number) {
           </div>
           <div class="space-y-2 border-t border-white/60 pt-2 text-sm">
             <div class="flex justify-between">
-              <span class="text-muted">Выкуплено</span>
+              <span class="text-muted">Оплачено</span>
               <span class="font-extrabold tabular-nums text-success">{{ formatPrice(totals.paid) }}</span>
             </div>
             <div class="flex justify-between">
-              <span class="text-muted">Осталось собрать</span>
+              <span class="text-muted">Долг</span>
               <span class="font-extrabold tabular-nums text-danger">{{ formatPrice(totals.unpaid) }}</span>
             </div>
             <div class="flex justify-between">
@@ -139,7 +139,7 @@ function rateTextClass(rate: number) {
         <ul v-else class="space-y-3">
           <li v-for="a in visible" :key="a.id">
             <NuxtLink
-              :to="`/stats/acceptances/${a.id}`"
+              :to="`/acceptances/${a.id}`"
               class="ui-card block px-4 py-4 transition active:scale-[0.99]"
             >
               <div class="flex items-start justify-between gap-3">
@@ -172,14 +172,12 @@ function rateTextClass(rate: number) {
 
               <div class="mt-2.5 flex justify-between text-xs">
                 <span class="text-muted">
-                  {{ formatPrice(a.paid_revenue) }} из {{ formatPrice(a.total_revenue) }}
+                  Оплачено {{ formatPrice(a.paid_revenue) }} из {{ formatPrice(a.total_revenue) }}
                 </span>
-                <span
-                  class="font-bold tabular-nums"
-                  :class="isRedeemed(a) ? 'text-success' : 'text-danger'"
-                >
-                  {{ isRedeemed(a) ? '+' : '' }}{{ formatPrice(a.realized) }}
+                <span v-if="a.unpaid_revenue > 0" class="font-bold tabular-nums text-danger">
+                  Долг {{ formatPrice(a.unpaid_revenue) }}
                 </span>
+                <span v-else-if="a.goods_count" class="font-bold text-success">Оплачено</span>
               </div>
             </NuxtLink>
           </li>

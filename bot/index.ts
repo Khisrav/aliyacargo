@@ -55,19 +55,27 @@ async function lookupByPhone(phone: string) {
     return null
   }
 
-  const { data: goods, error: goodsError } = await supabase
-    .from('goods')
-    .select('weight, price, has_paid, created_at')
-    .eq('client_id', client.id)
-    .is('deleted_at', null)
-    .order('created_at', { ascending: false })
-    .limit(30)
+  // PostgREST caps a response at 1000 rows, so page through to total every package.
+  const goods: Array<{ weight: number, price: number, has_paid: boolean, created_at: string }> = []
+  for (let from = 0; ; from += 1000) {
+    const { data, error: goodsError } = await supabase
+      .from('goods')
+      .select('id, weight, price, has_paid, created_at')
+      .eq('client_id', client.id)
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
+      .range(from, from + 999)
 
-  if (goodsError) {
-    throw new Error(goodsError.message)
+    if (goodsError) {
+      throw new Error(goodsError.message)
+    }
+
+    goods.push(...(data ?? []))
+    if (!data || data.length < 1000) break
   }
 
-  return { client, goods: goods ?? [] }
+  return { client, goods }
 }
 
 function buildLookupMessage(

@@ -1,5 +1,6 @@
 import { createError, getRouterParam } from 'h3'
 import { requireTelegramAuth } from '../../utils/auth'
+import { fetchAllPages } from '../../utils/pagination'
 import { GOODS_SELECT, mapGoodRow, useSupabaseAdmin } from '../../utils/supabase'
 
 export default defineEventHandler(async (event) => {
@@ -24,18 +25,18 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 404, statusMessage: 'Клиент не найден' })
   }
 
-  const { data: goods, error: goodsError } = await supabase
-    .from('goods')
-    .select(GOODS_SELECT)
-    .eq('client_id', id)
-    .is('deleted_at', null)
-    .order('created_at', { ascending: false })
+  const goods = await fetchAllPages<Record<string, any>>((from, to) =>
+    supabase
+      .from('goods')
+      .select(GOODS_SELECT)
+      .eq('client_id', id)
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
+      .range(from, to),
+  )
 
-  if (goodsError) {
-    throw createError({ statusCode: 500, statusMessage: goodsError.message })
-  }
-
-  const mapped = (goods ?? []).map(row => mapGoodRow(row as Record<string, any>))
+  const mapped = goods.map(row => mapGoodRow(row as Record<string, any>))
   const unpaid = mapped.filter(g => !g.has_paid)
 
   return {

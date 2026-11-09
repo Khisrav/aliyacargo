@@ -1,6 +1,7 @@
 import { createError, getRouterParam } from 'h3'
 import { requireTelegramAuth } from '../../../utils/auth'
 import { addGood, buildAcceptanceStats, emptyAggregate, money, rate, weight } from '../../../utils/acceptanceStats'
+import { fetchAllPages } from '../../../utils/pagination'
 import { useSupabaseAdmin } from '../../../utils/supabase'
 import type { AcceptanceStatsClient, AcceptanceStatsDetail } from '#shared/types/domain'
 
@@ -27,21 +28,20 @@ export default defineEventHandler(async (event): Promise<AcceptanceStatsDetail> 
     throw createError({ statusCode: 404, statusMessage: 'Приёмка не найдена' })
   }
 
-  const { data: goods, error: goodsError } = await supabase
-    .from('goods')
-    .select('client_id, weight, price, has_paid, paid_at, clients(id, name, phone)')
-    .eq('acceptance_id', id)
-    .is('deleted_at', null)
-    .limit(20000)
-
-  if (goodsError) {
-    throw createError({ statusCode: 500, statusMessage: goodsError.message })
-  }
+  const goods = await fetchAllPages((from, to) =>
+    supabase
+      .from('goods')
+      .select('id, client_id, weight, price, has_paid, paid_at, clients(id, name, phone)')
+      .eq('acceptance_id', id)
+      .is('deleted_at', null)
+      .order('id', { ascending: true })
+      .range(from, to),
+  )
 
   const agg = emptyAggregate()
   const clientMap = new Map<number, AcceptanceStatsClient>()
 
-  for (const row of goods ?? []) {
+  for (const row of goods) {
     const good = row as Record<string, any>
     addGood(agg, good)
 

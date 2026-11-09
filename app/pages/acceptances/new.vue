@@ -11,7 +11,13 @@ const state = ref<'loading' | 'ok' | 'error'>('loading')
 const saving = ref(false)
 const toast = ref<{ type: 'success' | 'error', message: string } | null>(null)
 
-const acceptedAt = ref(new Date().toISOString().slice(0, 10))
+// The business day is Asia/Dushanbe; the UTC date is still yesterday until 05:00 local.
+const acceptedAt = ref(new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Asia/Dushanbe',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+}).format(new Date()))
 const totalWeight = ref('')
 const paidTjs = ref('')
 
@@ -86,7 +92,7 @@ async function save() {
       </label>
 
       <label class="ui-field">
-        <span class="ui-label">Оплачено посреднику, TJS</span>
+        <span class="ui-label">Закупка — оплачено посреднику, TJS</span>
         <input v-model="paidTjs" type="text" inputmode="decimal" class="ui-input" placeholder="Например 5000">
       </label>
 

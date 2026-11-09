@@ -79,13 +79,13 @@ async function load() {
                   {{ formatDate(item.accepted_at) }}
                 </p>
                 <div class="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
-                  <UiFact icon="weight" :value="formatWeight(item.total_weight)" />
-                  <UiFact icon="box" :value="`${item.goods_count ?? 0} тов.`" />
+                  <UiFact icon="weight" :value="`принято ${formatWeight(item.total_weight)}`" />
                   <UiFact
                     v-if="item.sorted_weight != null"
                     icon="weight"
                     :value="`отсорт. ${formatWeight(item.sorted_weight)}`"
                   />
+                  <UiFact icon="box" :value="`${item.goods_count ?? 0} тов.`" />
                 </div>
               </div>
               <span
@@ -98,7 +98,7 @@ async function load() {
               </span>
             </div>
             <div class="mt-3 flex justify-between text-sm">
-              <span class="text-muted">Оплачено посреднику</span>
+              <span class="text-muted">Закупка</span>
               <span class="font-extrabold tabular-nums text-ink">{{ formatPrice(item.paid_tjs) }}</span>
             </div>
             <div v-if="item.status === 'closed' && item.waste_weight != null" class="mt-1 flex justify-between text-sm">

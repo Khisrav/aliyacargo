@@ -1,6 +1,7 @@
 import { createError } from 'h3'
 import { requireTelegramAuth } from '../../../utils/auth'
 import { addGood, buildAcceptanceStats, emptyAggregate } from '../../../utils/acceptanceStats'
+import { fetchAllPages } from '../../../utils/pagination'
 import { useSupabaseAdmin } from '../../../utils/supabase'
 
 export default defineEventHandler(async (event) => {
@@ -22,19 +23,18 @@ export default defineEventHandler(async (event) => {
   const rows = acceptances ?? []
   if (!rows.length) return []
 
-  const { data: goods, error: goodsError } = await supabase
-    .from('goods')
-    .select('acceptance_id, client_id, weight, price, has_paid, paid_at')
-    .in('acceptance_id', rows.map(a => a.id))
-    .is('deleted_at', null)
-    .limit(20000)
-
-  if (goodsError) {
-    throw createError({ statusCode: 500, statusMessage: goodsError.message })
-  }
+  const goods = await fetchAllPages((from, to) =>
+    supabase
+      .from('goods')
+      .select('id, acceptance_id, client_id, weight, price, has_paid, paid_at')
+      .in('acceptance_id', rows.map(a => a.id))
+      .is('deleted_at', null)
+      .order('id', { ascending: true })
+      .range(from, to),
+  )
 
   const byAcceptance = new Map<number, ReturnType<typeof emptyAggregate>>()
-  for (const good of goods ?? []) {
+  for (const good of goods) {
     const id = Number(good.acceptance_id)
     let agg = byAcceptance.get(id)
     if (!agg) {
