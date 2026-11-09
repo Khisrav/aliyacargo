@@ -606,15 +606,21 @@ async function closeAcceptance() {
               {{ formatPrice(money.profitNow) }}
             </span>
           </div>
-          <div class="flex justify-between">
-            <span class="text-muted">Прибыль при полной оплате</span>
-            <span class="font-extrabold tabular-nums" :class="money.profitFull >= 0 ? 'text-success' : 'text-danger'">
-              {{ formatPrice(money.profitFull) }}
-            </span>
-          </div>
-          <p v-if="money.profitNow < 0 && money.breakEven > 0" class="text-[11px] font-medium text-muted">
-            Закупка окупится, когда оплатят {{ money.breakEven }}% партии.
+          <!-- While sorting, part of the weight has no price yet, so a full-payment profit would be misleading. -->
+          <p v-if="acceptance.status === 'open'" class="text-[11px] font-medium text-muted">
+            Партия ещё сортируется — итоговая прибыль будет видна после закрытия.
           </p>
+          <template v-else>
+            <div class="flex justify-between">
+              <span class="text-muted">Прибыль при полной оплате</span>
+              <span class="font-extrabold tabular-nums" :class="money.profitFull >= 0 ? 'text-success' : 'text-danger'">
+                {{ formatPrice(money.profitFull) }}
+              </span>
+            </div>
+            <p v-if="money.profitNow < 0 && money.breakEven > 0 && money.breakEven <= 100" class="text-[11px] font-medium text-muted">
+              Закупка окупится, когда оплатят {{ money.breakEven }}% партии.
+            </p>
+          </template>
         </div>
       </section>
 
