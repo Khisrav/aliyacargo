@@ -1,6 +1,8 @@
 import { createError, getQuery, readBody } from 'h3'
 import { requireTelegramAuth } from '../../utils/auth'
 import { mapFinanceRow } from '../../utils/finance'
+import { fetchAllPages } from '../../utils/pagination'
+import { addDateKeyDays, businessDayStart, parseDateParam } from '../../utils/period'
 import { useSupabaseAdmin } from '../../utils/supabase'
 import type { FinanceType } from '#shared/types/domain'
 
@@ -12,36 +14,37 @@ export default defineEventHandler(async (event) => {
     const query = getQuery(event)
     const type = typeof query.type === 'string' ? query.type : 'all'
     const search = typeof query.search === 'string' ? query.search.trim() : ''
-    const dateFrom = typeof query.dateFrom === 'string' ? query.dateFrom : ''
-    const dateTo = typeof query.dateTo === 'string' ? query.dateTo : ''
+    // Business days in Asia/Dushanbe, the same boundaries the daily reports use.
+    const dateFrom = parseDateParam(query.dateFrom, 'dateFrom')
+    const dateTo = parseDateParam(query.dateTo, 'dateTo')
 
     const supabase = useSupabaseAdmin()
-    let builder = supabase
-      .from('finance_records')
-      .select('id, type, amount, note, created_by, created_at')
-      .is('deleted_at', null)
-      .order('created_at', { ascending: false })
-      .limit(1000)
+    const rows = await fetchAllPages<Record<string, any>>((from, to) => {
+      let builder = supabase
+        .from('finance_records')
+        .select('id, type, amount, note, created_by, created_at')
+        .is('deleted_at', null)
 
-    if (type === 'income' || type === 'expense') {
-      builder = builder.eq('type', type)
-    }
-    if (search) {
-      builder = builder.ilike('note', `%${search}%`)
-    }
-    if (dateFrom) {
-      builder = builder.gte('created_at', `${dateFrom}T00:00:00.000Z`)
-    }
-    if (dateTo) {
-      builder = builder.lte('created_at', `${dateTo}T23:59:59.999Z`)
-    }
+      if (type === 'income' || type === 'expense') {
+        builder = builder.eq('type', type)
+      }
+      if (search) {
+        builder = builder.ilike('note', `%${search}%`)
+      }
+      if (dateFrom) {
+        builder = builder.gte('created_at', businessDayStart(dateFrom).toISOString())
+      }
+      if (dateTo) {
+        builder = builder.lt('created_at', businessDayStart(addDateKeyDays(dateTo, 1)).toISOString())
+      }
 
-    const { data, error } = await builder
-    if (error) {
-      throw createError({ statusCode: 500, statusMessage: error.message })
-    }
+      return builder
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: false })
+        .range(from, to)
+    })
 
-    return (data ?? []).map(row => mapFinanceRow(row as Record<string, any>))
+    return rows.map(row => mapFinanceRow(row))
   }
 
   if (method === 'POST') {
