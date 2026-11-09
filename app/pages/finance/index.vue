@@ -253,7 +253,7 @@ const totals = computed(() => {
               <p class="text-sm font-extrabold tabular-nums text-danger">{{ formatPrice(totals.expense) }}</p>
             </div>
             <div>
-              <p class="text-[10px] font-bold uppercase tracking-wide text-muted">Сальдо</p>
+              <p class="text-[10px] font-bold uppercase tracking-wide text-muted">Разница</p>
               <p class="text-sm font-extrabold tabular-nums text-ink">{{ formatPrice(totals.net) }}</p>
             </div>
           </section>

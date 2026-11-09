@@ -92,7 +92,7 @@ async function save() {
       </label>
 
       <label class="ui-field">
-        <span class="ui-label">Оплачено посреднику, TJS</span>
+        <span class="ui-label">Закупка — оплачено посреднику, TJS</span>
         <input v-model="paidTjs" type="text" inputmode="decimal" class="ui-input" placeholder="Например 5000">
       </label>
 

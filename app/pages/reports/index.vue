@@ -90,7 +90,7 @@ async function load() {
                   <UiFact icon="price" :value="`собрано ${r.payments_count}`" />
                 </div>
                 <p v-if="r.debt_revenue > 0" class="mt-0.5 text-[11px] font-bold text-muted">
-                  Остаток долга {{ formatPrice(r.debt_revenue) }}
+                  Долг {{ formatPrice(r.debt_revenue) }}
                 </p>
               </div>
               <div class="shrink-0 text-right">

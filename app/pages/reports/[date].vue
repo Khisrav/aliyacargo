@@ -117,7 +117,7 @@ async function recalculate() {
 
       <template v-else-if="report">
         <section class="ui-card space-y-3 px-4 py-4">
-          <h2 class="text-sm font-extrabold text-ink">Итог дня</h2>
+          <h2 class="text-sm font-extrabold text-ink">Чистыми за день</h2>
           <p
             class="text-3xl font-extrabold tabular-nums"
             :class="report.net_profit >= 0 ? 'text-success' : 'text-danger'"
@@ -187,8 +187,8 @@ async function recalculate() {
         </section>
 
         <section class="ui-card space-y-3 px-4 py-4">
-          <h2 class="text-sm font-extrabold text-ink">Остатки</h2>
-          <p class="text-xs font-medium text-muted">Не оплачено из товаров этого дня</p>
+          <h2 class="text-sm font-extrabold text-ink">Долг по товарам этого дня</h2>
+          <p class="text-xs font-medium text-muted">Отсортированы в этот день и не оплачены к 00:00</p>
           <div class="grid grid-cols-3 gap-2 text-center">
             <div>
               <p class="text-[10px] font-bold uppercase text-muted">Шт</p>
@@ -204,7 +204,7 @@ async function recalculate() {
             </div>
           </div>
           <div class="space-y-2 border-t border-white/60 pt-2 text-sm">
-            <p class="text-xs font-medium text-muted">Общий долг на конец дня</p>
+            <p class="text-xs font-medium text-muted">Долг на конец дня · все товары</p>
             <div class="flex justify-between">
               <span class="text-muted">{{ report.debt_count }} шт · {{ report.debt_clients_count }} клиент.</span>
               <span class="font-extrabold tabular-nums text-danger">{{ formatPrice(report.debt_revenue) }}</span>
@@ -222,7 +222,7 @@ async function recalculate() {
               </span>
             </div>
             <div class="flex justify-between">
-              <span class="text-muted">Оплачено поставщику</span>
+              <span class="text-muted">Закупка</span>
               <span class="font-extrabold tabular-nums text-danger">{{ formatPrice(report.acceptance_cost) }}</span>
             </div>
             <div class="flex justify-between">
@@ -270,7 +270,7 @@ async function recalculate() {
         </section>
 
         <p class="px-1 text-center text-[11px] font-medium text-muted">
-          Сформирован {{ formatDateTime(report.generated_at) }}
+          Снимок на {{ formatDateTime(report.generated_at) }}. Правки после этого не учтены — нажмите «Пересчитать».
         </p>
       </template>
     </div>
