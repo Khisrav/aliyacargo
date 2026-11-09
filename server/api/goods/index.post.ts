@@ -1,6 +1,7 @@
 import { createError, readBody } from 'h3'
 import { requireTelegramAuth } from '../../utils/auth'
 import { upsertClientByPhone } from '../../utils/clients'
+import { fetchAllPages } from '../../utils/pagination'
 import { GOODS_SELECT, mapGoodRow, useSupabaseAdmin } from '../../utils/supabase'
 
 interface CreateGoodBody {
@@ -61,13 +62,17 @@ export default defineEventHandler(async (event) => {
   const price = Math.round(weight * pricePerKg * 100) / 100
   const goodName = body.good_name?.trim() || client.name
 
-  const { data: existingGoods } = await supabase
-    .from('goods')
-    .select('weight')
-    .eq('acceptance_id', acceptanceId)
-    .is('deleted_at', null)
+  const existingGoods = await fetchAllPages((from, to) =>
+    supabase
+      .from('goods')
+      .select('id, weight')
+      .eq('acceptance_id', acceptanceId)
+      .is('deleted_at', null)
+      .order('id', { ascending: true })
+      .range(from, to),
+  )
 
-  const sortedSoFar = (existingGoods ?? []).reduce((s, g) => s + Number(g.weight), 0)
+  const sortedSoFar = existingGoods.reduce((s, g) => s + Number(g.weight), 0)
   if (sortedSoFar + weight > Number(acceptance.total_weight) + 0.05) {
     throw createError({
       statusCode: 400,

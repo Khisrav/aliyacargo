@@ -1,4 +1,5 @@
 import { createError, readBody } from 'h3'
+import { fetchAllPages } from '../../utils/pagination'
 import { useSupabaseAdmin } from '../../utils/supabase'
 import { formatPhone, isValidPhone, normalizePhone } from '#shared/utils/phone'
 
@@ -46,19 +47,19 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  const { data: rows, error: goodsError } = await supabase
-    .from('goods')
-    .select('weight, price, has_paid, created_at')
-    .eq('client_id', client.id)
-    .is('deleted_at', null)
-    .order('created_at', { ascending: false })
-    .limit(200)
+  const rows = await fetchAllPages((from, to) =>
+    supabase
+      .from('goods')
+      .select('id, weight, price, has_paid, created_at')
+      .eq('client_id', client.id)
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
+      .range(from, to),
+  )
 
-  if (goodsError) {
-    throw createError({ statusCode: 500, statusMessage: goodsError.message })
-  }
-
-  const goods = (rows ?? []).map(row => ({
+  // Totals cover every package; only the newest are listed.
+  const goods = rows.map(row => ({
     weight: Number(row.weight),
     price: Number(row.price),
     has_paid: Boolean(row.has_paid),
@@ -76,7 +77,7 @@ export default defineEventHandler(async (event) => {
       name: client.name,
       phone: client.phone,
     },
-    goods,
+    goods: goods.slice(0, 200),
     stats: {
       totalCount: goods.length,
       totalWeight: Math.round(goods.reduce((s, g) => s + g.weight, 0) * 1000) / 1000,

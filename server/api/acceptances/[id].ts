@@ -1,5 +1,6 @@
 import { createError, getRouterParam, readBody } from 'h3'
 import { requireTelegramAuth } from '../../utils/auth'
+import { fetchAllPages } from '../../utils/pagination'
 import { GOODS_SELECT, mapAcceptanceRow, mapGoodRow, useSupabaseAdmin } from '../../utils/supabase'
 
 export default defineEventHandler(async (event) => {
@@ -27,18 +28,18 @@ export default defineEventHandler(async (event) => {
       throw createError({ statusCode: 404, statusMessage: 'Приёмка не найдена' })
     }
 
-    const { data: goods, error: goodsError } = await supabase
-      .from('goods')
-      .select(GOODS_SELECT)
-      .eq('acceptance_id', id)
-      .is('deleted_at', null)
-      .order('created_at', { ascending: false })
+    const goods = await fetchAllPages<Record<string, any>>((from, to) =>
+      supabase
+        .from('goods')
+        .select(GOODS_SELECT)
+        .eq('acceptance_id', id)
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: false })
+        .range(from, to),
+    )
 
-    if (goodsError) {
-      throw createError({ statusCode: 500, statusMessage: goodsError.message })
-    }
-
-    const mappedGoods = (goods ?? []).map(row => mapGoodRow(row as Record<string, any>))
+    const mappedGoods = goods.map(row => mapGoodRow(row as Record<string, any>))
     const sortedWeight = mappedGoods.reduce((s, g) => s + g.weight, 0)
 
     return {
@@ -71,21 +72,21 @@ export default defineEventHandler(async (event) => {
       throw createError({ statusCode: 400, statusMessage: 'Приёмка уже закрыта' })
     }
 
-    const { data: goods, error: goodsError } = await supabase
-      .from('goods')
-      .select('weight')
-      .eq('acceptance_id', id)
-      .is('deleted_at', null)
+    const goods = await fetchAllPages((from, to) =>
+      supabase
+        .from('goods')
+        .select('id, weight')
+        .eq('acceptance_id', id)
+        .is('deleted_at', null)
+        .order('id', { ascending: true })
+        .range(from, to),
+    )
 
-    if (goodsError) {
-      throw createError({ statusCode: 500, statusMessage: goodsError.message })
-    }
-
-    const sortedWeight = (goods ?? []).reduce((s, g) => s + Number(g.weight), 0)
+    const sortedWeight = goods.reduce((s, g) => s + Number(g.weight), 0)
     const totalWeight = Number(acceptance.total_weight)
     const wasteWeight = Math.max(0, Math.round((totalWeight - sortedWeight) * 1000) / 1000)
 
-    if ((goods ?? []).length === 0 && !body?.confirm) {
+    if (goods.length === 0 && !body?.confirm) {
       throw createError({
         statusCode: 400,
         statusMessage: 'Нет отсортированных товаров. Подтвердите закрытие — весь вес станет мусором.',
@@ -117,7 +118,7 @@ export default defineEventHandler(async (event) => {
 
     return mapAcceptanceRow(updated as Record<string, any>, {
       sorted_weight: Math.round(sortedWeight * 1000) / 1000,
-      goods_count: (goods ?? []).length,
+      goods_count: goods.length,
     })
   }
 

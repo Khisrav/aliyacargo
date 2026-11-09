@@ -1,5 +1,6 @@
 import { createError, send, setHeader } from 'h3'
 import { requireTelegramAuth } from '../../utils/auth'
+import { fetchAllPages } from '../../utils/pagination'
 import { mapAcceptanceRow, useSupabaseAdmin } from '../../utils/supabase'
 
 export default defineEventHandler(async (event) => {
@@ -25,16 +26,20 @@ export default defineEventHandler(async (event) => {
     return send(event, 'null')
   }
 
-  const { data: goods } = await supabase
-    .from('goods')
-    .select('weight')
-    .eq('acceptance_id', data.id)
-    .is('deleted_at', null)
+  const goods = await fetchAllPages((from, to) =>
+    supabase
+      .from('goods')
+      .select('id, weight')
+      .eq('acceptance_id', data.id)
+      .is('deleted_at', null)
+      .order('id', { ascending: true })
+      .range(from, to),
+  )
 
-  const sortedWeight = (goods ?? []).reduce((s, g) => s + Number(g.weight), 0)
+  const sortedWeight = goods.reduce((s, g) => s + Number(g.weight), 0)
 
   return mapAcceptanceRow(data as Record<string, any>, {
     sorted_weight: Math.round(sortedWeight * 1000) / 1000,
-    goods_count: (goods ?? []).length,
+    goods_count: goods.length,
   })
 })

@@ -1,6 +1,7 @@
 import { createError, getRouterParam, readBody } from 'h3'
 import { collectTrackCodes, tracksEnabled } from '#shared/utils/tracks'
 import { requireTelegramAuth } from '../../utils/auth'
+import { fetchAllPages } from '../../utils/pagination'
 import { GOODS_SELECT, mapGoodRow, useSupabaseAdmin } from '../../utils/supabase'
 
 export default defineEventHandler(async (event) => {
@@ -136,13 +137,17 @@ export default defineEventHandler(async (event) => {
         throw createError({ statusCode: 400, statusMessage: 'Вес должен быть больше 0' })
       }
 
-      const { data: siblings } = await supabase
-        .from('goods')
-        .select('id, weight')
-        .eq('acceptance_id', existing.acceptance_id)
-        .is('deleted_at', null)
+      const siblings = await fetchAllPages((from, to) =>
+        supabase
+          .from('goods')
+          .select('id, weight')
+          .eq('acceptance_id', existing.acceptance_id)
+          .is('deleted_at', null)
+          .order('id', { ascending: true })
+          .range(from, to),
+      )
 
-      const othersWeight = (siblings ?? [])
+      const othersWeight = siblings
         .filter(g => Number(g.id) !== id)
         .reduce((s, g) => s + Number(g.weight), 0)
 
